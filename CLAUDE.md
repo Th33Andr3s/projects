@@ -1,0 +1,335 @@
+# CLAUDE.md
+
+Guía base de trabajo para Claude Code. Este archivo tiene dos partes:
+
+- **Parte 1. Reglas generales**: aplican a cualquier repositorio donde se copie este archivo, sin importar el tipo de proyecto.
+- **Parte 2. Reglas de este repositorio**: aplican solo a esta colección de sitios estáticos publicados en GitHub Pages. Al reutilizar este archivo en otro repositorio, solo se reemplaza esta parte.
+
+Las reglas de este archivo tienen prioridad sobre cualquier costumbre o valor por defecto de Claude.
+
+---
+
+# Parte 1. Reglas generales (cualquier proyecto)
+
+## 1.1 Git es exclusivo del dueño del repositorio
+
+Claude **nunca** ejecuta operaciones de git. Esto incluye, sin excepción:
+
+- `git add`, `git commit`, `git push`, `git pull`, `git fetch`, `git merge`, `git rebase`
+- Crear, cambiar o borrar ramas
+- Crear tags, stashes o pull requests
+- Modificar `.git/`, hooks o la configuración de git
+
+Claude sí puede **leer** el estado de git (`git status`, `git log`, `git diff`) cuando ayude a entender el contexto. Todo lo que cambie el historial o el remoto lo hace únicamente la persona dueña del repositorio, cuando ella lo decida.
+
+## 1.2 Idioma
+
+| Qué | Idioma |
+|---|---|
+| Código: nombres de variables, funciones, clases, archivos, carpetas, ids, claves | Inglés |
+| Comentarios dentro del código | Español |
+| Documentación: README, planes, este archivo | Español |
+| Textos visibles para la persona en la interfaz | Español |
+| Mensajes de Claude en la conversación | Español |
+
+Los comentarios explican el **por qué** de una decisión, no repiten lo que el código ya dice.
+
+## 1.3 Nomenclatura
+
+- **snake_case** para todo: carpetas, archivos, variables, funciones, clases CSS, ids de HTML, claves de almacenamiento, tablas y columnas de base de datos.
+- **UPPER_SNAKE_CASE** para constantes.
+- Nombres descriptivos y completos. `total_amount` en lugar de `ta`. `calculate_monthly_payment` en lugar de `calc`.
+- Sin prefijos ni sufijos técnicos innecesarios (`str_name`, `arr_items`).
+
+## 1.4 Simplicidad ante todo
+
+- Se prefiere siempre la solución más sencilla que cumpla el objetivo.
+- No se agregan dependencias, herramientas ni abstracciones "por si acaso".
+- No se crean archivos, carpetas ni configuraciones fuera de la estructura definida para el proyecto.
+- Un proyecto pequeño se resuelve con pocos archivos claros, no con muchas capas.
+
+## 1.5 Calidad mínima obligatoria
+
+Todo lo que se entregue debe cumplir esto, sin que haya que pedirlo:
+
+- **Responsive**: funciona y se ve bien en cualquier tamaño de pantalla, priorizando celulares.
+- **Navegación por teclado**: todo lo que se puede hacer con el mouse o el dedo se puede hacer con Tab, Enter, Espacio, Escape y flechas. El foco siempre es visible.
+- **Intuitivo**: una persona sin conocimientos técnicos entiende qué hacer sin leer instrucciones.
+- **Ordenado**: nombres consistentes, archivos en su lugar, sin código muerto ni comentarios obsoletos.
+- **Sin errores en consola** al cargar ni al usar la aplicación.
+
+## 1.6 Documentación por proyecto
+
+Cada proyecto tiene su propio `README.md` con exactamente estas tres secciones:
+
+1. **Título** del proyecto.
+2. **Descripción** breve de qué hace y para quién.
+3. **Ejecución local**: el comando exacto para correrlo y la URL que abrir.
+
+## 1.7 Forma de trabajar con Claude
+
+- Claude **no inicia un desarrollo ni un plan** hasta que la persona lo indique explícitamente. Antes de eso, solo analiza, propone y pregunta.
+- Ante una decisión estructural (nuevo archivo fuera de la estructura, nueva librería, cambio de enfoque), Claude pregunta antes de actuar.
+- Claude trabaja solo dentro de la carpeta del proyecto que se está desarrollando. No toca otros proyectos del repositorio.
+- Cuando algo no se pueda cumplir tal como se pidió, Claude lo dice de forma directa, propone la alternativa más cercana y continúa con el resto.
+- Claude reporta lo que hizo de forma clara y verificable, sin exagerar ni omitir problemas.
+
+---
+
+# Parte 2. Reglas de este repositorio
+
+## 2.1 Qué es este repositorio
+
+Una colección de **proyectos web estáticos, pequeños e independientes**, publicados automáticamente en GitHub Pages. Cada carpeta de primer nivel es un proyecto completo y autónomo sobre un tema distinto. Lo único que comparten es este repositorio contenedor y el portal de la raíz.
+
+## 2.2 Stack permitido
+
+Solo se usa esto. Nada más.
+
+| Tecnología | Uso |
+|---|---|
+| HTML5 | Estructura |
+| CSS3 | Estilos, layout responsive, transiciones simples |
+| JavaScript vanilla (ES2020+) | Toda la lógica. Sin frameworks, sin TypeScript, sin bundlers |
+| Three.js | Animaciones y escenas 3D |
+| Lottie (LottieFiles) | Animaciones vectoriales |
+| Font Awesome | Iconos |
+| SVG inline o en archivo | Iconos e ilustraciones propias |
+| Supabase | Solo para proyectos que necesiten datos compartidos entre personas o privados tras login. Ver sección 2.9 |
+
+**Prohibido**: npm, Node, bundlers (Vite, Webpack), preprocesadores (Sass, Less), frameworks (React, Vue), jQuery, librerías de utilidades adicionales.
+
+## 2.3 Todo por CDN con versión fija
+
+Ninguna librería se descarga al repositorio. Se carga por CDN con la versión exacta que aparece aquí. Todos los proyectos usan las mismas versiones.
+
+```html
+<!-- Font Awesome: en el <head> -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+
+<!-- Lottie: reproductor como web component, antes de cerrar <body> -->
+<script src="https://unpkg.com/@lottiefiles/lottie-player@2.0.12/dist/lottie-player.js"></script>
+
+<!-- Three.js: solo se distribuye como módulo ES, por eso usa importmap -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+
+<!-- Supabase: solo en proyectos que lo necesiten, se importa dentro de un módulo -->
+<!-- import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm"; -->
+```
+
+Consecuencia: los scripts propios se cargan con `<script type="module" src="./js/main.js">`. Dentro de ellos se usa `import * as THREE from "three";`.
+
+Si se necesita subir la versión de alguna librería, se cambia aquí primero y luego en todos los proyectos a la vez.
+
+## 2.4 Estructura del repositorio
+
+```
+projects/
+├── CLAUDE.md              # Este archivo
+├── README.md              # Descripción del repositorio
+├── .gitignore
+├── .nojekyll              # Evita que GitHub Pages procese el sitio con Jekyll
+├── dev_server.py          # Servidor local de desarrollo: sin caché y con recarga al reiniciar
+├── index.html             # Portal: lista y enlaza todos los proyectos
+├── css/
+│   └── styles.css         # Estilos del portal
+├── js/
+│   └── main.js            # Script del portal
+│
+├── book_life/             # Un proyecto
+├── calendar/              # Otro proyecto
+├── financial_calculator/
+├── materials_calculator/
+├── measurement_calculator/
+└── password_generator/
+```
+
+## 2.5 Estructura fija de cada proyecto
+
+Todos los proyectos tienen **exactamente** esta estructura. Solo cambia el contenido de los archivos, nunca su nombre ni su ubicación.
+
+```
+nombre_del_proyecto/
+├── index.html             # Única página. GitHub Pages la sirve automáticamente
+├── README.md              # Título, descripción y ejecución local
+├── css/
+│   └── styles.css         # Todos los estilos del proyecto
+├── js/
+│   ├── main.js            # Lógica del proyecto (módulo ES)
+│   ├── animations.js      # Three.js, Lottie y cualquier animación
+│   └── config.js          # Solo si el proyecto usa Supabase. Ver 2.9
+└── assets/
+    ├── lottie/            # Archivos .json o .lottie
+    ├── icons/             # SVG propios
+    └── img/               # Imágenes
+```
+
+Reglas:
+
+- Si un proyecto no necesita una carpeta de `assets/`, se deja vacía o no se crea, pero no se inventa otra.
+- Si la lógica crece, se puede dividir `main.js` en más archivos dentro de `js/`, siempre en snake_case y siempre importados desde `main.js`.
+- No se crean subcarpetas fuera de las definidas.
+
+## 2.6 Aislamiento total entre proyectos
+
+- Cada proyecto es completamente autónomo. Se puede copiar su carpeta a otro lugar y sigue funcionando.
+- **Nada se comparte** entre proyectos: ni CSS, ni JS, ni assets, ni configuración.
+- Un proyecto nunca enlaza, importa ni referencia archivos de otro proyecto ni de la raíz.
+- Si dos proyectos necesitan lo mismo, se duplica. La duplicación es preferible al acoplamiento.
+
+## 2.7 Reglas de GitHub Pages
+
+El sitio se publica desde la rama principal, en la raíz del repositorio. La URL de cada proyecto es `https://<usuario>.github.io/projects/<nombre_del_proyecto>/`.
+
+- La página de cada proyecto se llama **`index.html`**, sin excepción.
+- **Todas las rutas son relativas** y empiezan con `./`. Ejemplo: `./css/styles.css`, `./assets/img/logo.svg`. Nunca `/css/styles.css` ni rutas absolutas.
+- El archivo `.nojekyll` en la raíz debe existir siempre.
+- Cada proyecto nuevo se agrega al portal `index.html` de la raíz.
+- No hay proceso de build. Lo que está en el repositorio es exactamente lo que se publica.
+
+## 2.8 Ejecución local
+
+Los módulos ES, los JSON de Lottie y Supabase no funcionan abriendo el archivo con doble clic (`file://`). Siempre se usa un servidor local. El comando estándar, ejecutado **desde la carpeta del proyecto**, es:
+
+```bash
+python ../dev_server.py
+```
+
+Y se abre `http://localhost:8080` en el navegador. Este es el comando que va en la sección "Ejecución local" del README de cada proyecto. Para usar otro puerto: `python ../dev_server.py 9000`.
+
+`dev_server.py` (en la raíz del repositorio) es una herramienta de desarrollo, no parte de ningún proyecto ni de lo que se publica. Hace lo mismo que `python -m http.server`, con dos mejoras:
+
+- **Sin caché:** envía cada archivo con la orden de no guardarse, así el navegador nunca muestra una copia vieja de la página, los estilos o los scripts.
+- **Recarga sola:** al reiniciar el servidor, las pestañas que ya estaban abiertas se recargan solas. Para esto agrega un pequeño aviso a las páginas HTML que entrega; los archivos del proyecto no cambian.
+
+En GitHub Pages no se puede controlar la caché: el navegador puede guardar una copia hasta 10 minutos. Si algo se ve como antes tras publicar, se recarga con Ctrl y F5.
+
+## 2.9 Datos: localStorage y Supabase
+
+### localStorage (por defecto)
+
+- Es la opción por defecto para guardar datos de la persona.
+- **Toda clave lleva el nombre del proyecto como prefijo**, para que dos proyectos bajo el mismo dominio no se pisen: `password_generator_history`, `calendar_events`.
+- Toda lectura y escritura va dentro de `try/catch`, porque puede fallar en modo privado o con almacenamiento bloqueado. La aplicación debe funcionar aunque falle.
+
+### Supabase (solo cuando haga falta)
+
+Se permite únicamente cuando el proyecto necesita **datos compartidos entre varias personas** o **datos privados protegidos por login**. Un sitio estático puede consumir Supabase directamente desde el navegador, sin servidor propio.
+
+Reglas obligatorias:
+
+- La URL del proyecto y la clave **`anon`** van en `js/config.js`. Esa clave es pública por diseño y puede estar en el repositorio.
+- La clave **`service_role` nunca** va en el código, en ningún archivo ni en la conversación.
+- **Row Level Security (RLS) activado en todas las tablas** desde el primer día. Sin RLS, cualquiera con la clave `anon` lee y escribe todo.
+- Autenticación con Supabase Auth. El registro abierto se desactiva; las cuentas se crean a mano desde el panel de Supabase.
+- Sin sesión activa, la página **no carga ni muestra ningún dato**. Solo la pantalla de acceso.
+- **Contenido privado nunca va en archivos del repositorio.** Un repositorio público expone todo lo que contiene, incluso lo que la página oculta tras login. Si un texto o imagen debe ser privado, vive en Supabase, no en `assets/` ni en el HTML.
+- Todo proyecto con Supabase incluye una función de **exportar todos los datos a JSON**, como respaldo ante cambios del servicio.
+- Las imágenes se redimensionan en el navegador antes de subirlas a Supabase Storage.
+- El plan gratuito de Supabase pausa el proyecto tras 7 días sin actividad. Se documenta en el README del proyecto.
+
+## 2.10 Animaciones (Three.js y Lottie)
+
+- Las animaciones son **decorativas**. Nunca bloquean ni retrasan una acción de la persona.
+- Se respeta `prefers-reduced-motion`: si la persona lo tiene activado, las animaciones se reducen a lo mínimo o se desactivan.
+- Se **pausan cuando la pestaña no está visible** (`visibilitychange`) para no gastar batería.
+- Los bucles de render usan `requestAnimationFrame`, nunca `setInterval`.
+- Three.js se ajusta al tamaño de la ventana (`resize`) y limita el `pixelRatio` a 2 como máximo.
+- El contenido debe verse y usarse correctamente aunque el 3D no cargue.
+- Toda la lógica de animación vive en `js/animations.js`.
+
+## 2.11 Checklist de proyecto terminado
+
+Un proyecto no se considera terminado hasta cumplir **todo** esto:
+
+- [ ] Estructura de carpetas y archivos exactamente como en 2.5
+- [ ] `README.md` con título, descripción y ejecución local
+- [ ] Funciona correctamente desde 360 px de ancho hasta escritorio
+- [ ] Se puede usar completo con teclado y el foco es visible
+- [ ] Sin errores ni advertencias en la consola del navegador
+- [ ] Todas las rutas son relativas con `./`
+- [ ] Librerías por CDN con las versiones de 2.3
+- [ ] Respeta `prefers-reduced-motion` y pausa animaciones al ocultar la pestaña
+- [ ] Claves de `localStorage` con prefijo del proyecto y lecturas en `try/catch`
+- [ ] Si usa Supabase: RLS activo, registro cerrado, sin datos sin sesión, exportación a JSON
+- [ ] Código en inglés, comentarios en español, todo en snake_case
+- [ ] Agregado al portal `index.html` de la raíz
+- [ ] Una persona sin contexto entiende cómo usarlo sin explicación
+
+## 2.12 Proyectos del repositorio
+
+| Carpeta | Proyecto | Descripción |
+|---|---|---|
+| `book_life` | Libro de vida | Libro digital privado de una pareja. Ambos escriben páginas directamente desde el celular, con título, fechas y una foto opcionales; todo se guarda en Supabase tras login y se revisa cada uno o dos meses. Se lee con estética de libro físico, estrellas y 3D. Todo el contenido es privado. |
+| `calendar` | Calendario | Agenda personal con eventos por día. Pendiente de definir en detalle. |
+| `financial_calculator` | Calculadora financiera | Cálculos de intereses, cuotas y amortización. Pendiente de definir en detalle. |
+| `materials_calculator` | Calculadora de materiales | Cálculo de cantidades de materiales para obras o proyectos. Pendiente de definir en detalle. |
+| `measurement_calculator` | Calculadora de medidas | Conversión entre unidades de medida. Pendiente de definir en detalle. |
+| `password_generator` | Generador de contraseñas | Genera contraseñas seguras con opciones configurables. Pendiente de definir en detalle. |
+
+## 2.13 Cómo agregar un proyecto nuevo
+
+1. Crear la carpeta en la raíz con nombre en snake_case.
+2. Crear la estructura completa de 2.5.
+3. Escribir el `README.md` según 1.6.
+4. Agregar la fila en la tabla 2.12 de este archivo.
+5. Agregar la tarjeta correspondiente en el portal `index.html` de la raíz.
+6. Verificar el checklist 2.11 antes de darlo por terminado.
+
+## 2.14 Plantilla base de `index.html`
+
+Todo proyecto parte de esta plantilla. Se eliminan las líneas de librerías que no se usen.
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nombre del proyecto</title>
+  <meta name="description" content="Descripción breve del proyecto">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Contenido principal. Siempre con un <main> para lectores de pantalla -->
+  <main id="main_content">
+    <h1>Nombre del proyecto</h1>
+  </main>
+
+  <script src="https://unpkg.com/@lottiefiles/lottie-player@2.0.12/dist/lottie-player.js"></script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
+```
+
+## 2.15 Plantilla base de `README.md` por proyecto
+
+```markdown
+# Nombre del proyecto
+
+Descripción breve: qué hace, para quién y qué problema resuelve.
+
+## Ejecución local
+
+Desde esta carpeta:
+
+    python ../dev_server.py
+
+Abrir http://localhost:8080 en el navegador.
+```

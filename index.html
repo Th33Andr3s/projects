@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proyectos</title>
+    <meta name="description" content="Portal de proyectos web personales" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="./css/styles.css" />
+  </head>
+  <body>
+    <!-- Enlace para saltar directo al contenido con teclado -->
+    <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+    <header class="site_header">
+      <h1 class="site_title">Proyectos</h1>
+      <p class="site_subtitle">
+        Herramientas y experimentos web, cada uno independiente.
+      </p>
+    </header>
+
+    <main id="main_content">
+      <ul class="project_list">
+        <li class="project_card">
+          <a class="project_link" href="./book_life/">
+            <span class="project_icon" aria-hidden="true"
+              ><i class="fa-solid fa-book-open"></i
+            ></span>
+            <span class="project_name">Libro de vida</span>
+            <span class="project_description"
+              >Libro digital privado de una pareja, escrito día a día.</span
+            >
+          </a>
+        </li>
+      </ul>
+    </main>
+
+    <footer class="site_footer">
+      <p>Hecho con HTML, CSS y JavaScript. <span id="current_year"></span></p>
+    </footer>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>

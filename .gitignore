@@ -1,0 +1,24 @@
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos temporales y de respaldo
+*.tmp
+*.bak
+*.log
+
+# Entornos y dependencias (no se usan en este repositorio, pero por si algo se instala por error)
+node_modules/
+.env
+.env.*
+
+# Configuración local de Claude Code
+.claude/

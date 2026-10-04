@@ -1,0 +1,1711 @@
+/* Atardecer romántico en tonos claros: lavanda, rosa y durazno. */
+:root {
+  --color_sky_top: #c3b2f3;
+  --color_sky_middle: #f2b5d4;
+  --color_sky_bottom: #ffd9c9;
+  --color_glass: rgba(255, 255, 255, 0.88);
+  --color_glass_edge: rgba(255, 255, 255, 0.85);
+  --color_text: #36264a;
+  --color_text_muted: #5b4a70;
+  --color_pink: #c2437f;
+  --color_pink_light: #ff7eb3;
+  --color_violet: #6f55c9;
+  --color_violet_soft: rgba(111, 85, 201, 0.14);
+  --color_gold: #ffd36e;
+  --color_error: #a8201a;
+  --color_error_soft: rgba(255, 255, 255, 0.85);
+  --color_focus: #ff8a00;
+  --radius: 24px;
+  --font_title: "Lora", Georgia, "Times New Roman", serif;
+  --font_ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* El atributo hidden siempre gana, aunque otra regla defina display */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  font-family: var(--font_ui);
+  color: var(--color_text);
+  line-height: 1.5;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.6), transparent 38%),
+    radial-gradient(circle at 86% 82%, rgba(255, 190, 215, 0.7), transparent 46%),
+    linear-gradient(180deg, var(--color_sky_top) 0%, var(--color_sky_middle) 55%, var(--color_sky_bottom) 100%);
+}
+
+/* Lienzo 3D de fondo: decorativo, nunca recibe toques */
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.skip_link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--color_violet);
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.skip_link:focus {
+  top: 16px;
+}
+
+main {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Los destellos pueden asomar fuera de la tarjeta; esto evita desplazamiento horizontal */
+  overflow-x: clip;
+}
+
+/* Nada puede asomar fuera de la pantalla y alargar la página: los destellos quedan dentro del margen. */
+.screen:not(.reader_screen) {
+  overflow: clip;
+}
+
+.screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  /* Margen lateral de 16px y espacio arriba y abajo para los destellos */
+  padding: 56px 16px;
+}
+
+/* Tarjeta con borde luminoso. Sin desenfoque de fondo: con el cielo animado detrás era demasiado costoso. */
+.card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  padding: 28px 24px 32px;
+  text-align: center;
+  background: var(--color_glass);
+  border: 1px solid var(--color_glass_edge);
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 38px rgba(255, 126, 179, 0.38),
+    0 0 90px rgba(143, 123, 217, 0.3),
+    0 18px 40px rgba(80, 50, 120, 0.18);
+  animation: card_enter 0.8s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  padding: 2px;
+  border-radius: calc(var(--radius) + 2px);
+  background: conic-gradient(from 30deg, #ff7eb3, #b49cff, #ffd98a, #ff7eb3);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+
+@keyframes card_enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+}
+
+/* Destellos alrededor de la tarjeta: aparecen, brillan y desaparecen */
+.sparkle_layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sparkle {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  font-size: var(--size);
+  color: var(--color_gold);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.95);
+  animation: sparkle_twinkle var(--duration) ease-in-out var(--delay) infinite;
+}
+
+.sparkle_heart {
+  color: #ff6f9f;
+}
+
+@keyframes sparkle_twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(45deg);
+  }
+}
+
+/* Emblema: corazón o rosa dentro de órbitas con puntos que giran */
+.emblem {
+  width: 132px;
+  height: 132px;
+  margin: -4px auto 4px;
+}
+
+.emblem {
+  position: relative;
+}
+
+/* Resplandor fijo detrás del emblema */
+.emblem::before {
+  content: "";
+  position: absolute;
+  inset: 14%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 110, 165, 0.4), transparent 70%);
+}
+
+.emblem svg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.orbit {
+  fill: none;
+  stroke: rgba(111, 85, 201, 0.4);
+  stroke-width: 1;
+  stroke-dasharray: 3 6;
+  transform-origin: 60px 60px;
+}
+
+.orbit_outer {
+  animation: spin 26s linear infinite;
+}
+
+.orbit_inner {
+  stroke: rgba(194, 67, 127, 0.45);
+  animation: spin 18s linear infinite reverse;
+}
+
+.orbit_spin {
+  transform-origin: 60px 60px;
+  animation: spin 9s linear infinite;
+}
+
+.orbit_spin_reverse {
+  animation-duration: 13s;
+  animation-direction: reverse;
+}
+
+.orbit_dot {
+  fill: var(--color_gold);
+}
+
+.orbit_dot_small {
+  fill: #ffffff;
+}
+
+.orbit_dot_pink {
+  fill: var(--color_pink_light);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.heart_shape {
+  transform-origin: 60px 58px;
+  animation: heartbeat 1.7s ease-in-out infinite;
+}
+
+.heart_shine {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform-origin: 60px 58px;
+  animation: heartbeat 1.7s ease-in-out infinite;
+}
+
+@keyframes heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.14);
+  }
+  28% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.1);
+  }
+  56% {
+    transform: scale(1);
+  }
+}
+
+/* Títulos */
+.book_title,
+.screen_title {
+  font-family: var(--font_title);
+  font-weight: 700;
+  outline: none;
+  color: var(--color_text);
+}
+
+.book_title {
+  font-size: clamp(2rem, 8vw, 2.6rem);
+  line-height: 1.15;
+  background: linear-gradient(90deg, var(--color_pink), var(--color_violet), var(--color_pink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.screen_title {
+  font-size: 1.7rem;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--color_gold);
+  font-size: 0.7rem;
+  filter: drop-shadow(0 0 4px rgba(255, 180, 60, 0.7));
+}
+
+.divider .fa-heart {
+  color: var(--color_pink_light);
+  font-size: 0.9rem;
+}
+
+.screen_hint {
+  margin: 12px 0 24px;
+  color: var(--color_text_muted);
+}
+
+.loading_block {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.loading_heart {
+  width: 96px;
+  height: 96px;
+}
+
+.loading_text {
+  color: var(--color_text);
+  font-family: var(--font_title);
+  font-size: 1.2rem;
+}
+
+/* Formulario */
+form {
+  text-align: left;
+}
+
+.field {
+  margin-bottom: 18px;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font: inherit;
+  /* 16px evita que iOS haga zoom al enfocar el campo */
+  font-size: 1rem;
+  color: var(--color_text);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1.5px solid rgba(111, 85, 201, 0.25);
+  border-radius: 14px;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+input:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 1px;
+  border-color: var(--color_pink_light);
+  box-shadow: 0 0 18px rgba(255, 126, 179, 0.55);
+}
+
+.password_row {
+  display: flex;
+  gap: 8px;
+}
+
+.form_error {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color_error);
+  background: var(--color_error_soft);
+  border-left: 4px solid var(--color_error);
+  border-radius: 10px;
+}
+
+/* Botones: área de toque mínima de 48px */
+.button,
+.icon_button {
+  min-height: 48px;
+  font: inherit;
+  font-weight: 600;
+  border: 0;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.25s ease;
+}
+
+.button {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 20px;
+}
+
+.button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.button_primary {
+  color: #ffffff;
+  background: linear-gradient(110deg, #c2437f 0%, #8a4fc4 60%, #6f55c9 100%);
+  box-shadow: 0 6px 20px rgba(194, 67, 127, 0.4);
+}
+
+/* Brillo que cruza el botón al pasar el cursor o enfocarlo */
+.button_primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.7s ease;
+  pointer-events: none;
+}
+
+.button_primary:hover:not(:disabled)::after,
+.button_primary:focus-visible::after {
+  left: 130%;
+}
+
+.button_primary:hover:not(:disabled) {
+  box-shadow: 0 8px 28px rgba(255, 90, 150, 0.6);
+  transform: translateY(-1px);
+}
+
+.button_secondary {
+  color: var(--color_violet);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1.5px solid rgba(111, 85, 201, 0.3);
+}
+
+.button_secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.button_link {
+  margin-top: 8px;
+  color: var(--color_text_muted);
+  background: transparent;
+  font-weight: 500;
+}
+
+.button_link:hover {
+  color: var(--color_text);
+}
+
+.icon_button {
+  flex: 0 0 48px;
+  width: 48px;
+  color: var(--color_violet);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1.5px solid rgba(111, 85, 201, 0.25);
+}
+
+.icon_button:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.button:focus-visible,
+.icon_button:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Menú principal */
+.menu {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* Tarjetas anchas para escribir y leer listas */
+.card_wide {
+  max-width: 640px;
+}
+
+.card_wide .screen_title {
+  margin-bottom: 4px;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 240px;
+  padding: 14px;
+  font-family: var(--font_title);
+  /* 16px como mínimo evita el zoom automático de iOS */
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--color_text);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(111, 85, 201, 0.25);
+  border-radius: 14px;
+  resize: vertical;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+textarea:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 1px;
+  border-color: var(--color_pink_light);
+  box-shadow: 0 0 18px rgba(255, 126, 179, 0.55);
+}
+
+textarea::placeholder {
+  color: #85739a;
+  font-style: italic;
+}
+
+.form_success {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1d6b43;
+  background: rgba(255, 255, 255, 0.85);
+  border-left: 4px solid #2f9e66;
+  border-radius: 10px;
+}
+
+form .button + .button {
+  margin-top: 10px;
+}
+
+/* Celebración Lottie al guardar: capa centrada sobre la pantalla, no empuja el formulario */
+.celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.celebration_wide lottie-player {
+  width: 100%;
+  height: 100%;
+  filter: none;
+}
+
+.celebration lottie-player {
+  width: min(70vw, 260px);
+  height: min(70vw, 260px);
+  filter: drop-shadow(0 0 18px rgba(255, 126, 179, 0.7));
+}
+
+/* Filtros de la lista */
+.list_status {
+  min-height: 1.5em;
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+/* Paginación de la lista */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.pager .button_small {
+  flex: 0 0 auto;
+}
+
+.pager .button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pager_text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--color_text);
+}
+
+/* Lista de páginas */
+.item_list {
+  list-style: none;
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.list_item {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(111, 85, 201, 0.18);
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(80, 50, 120, 0.08);
+}
+
+.list_item_meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+  font-size: 0.88rem;
+}
+
+.list_item_date {
+  font-weight: 700;
+  color: var(--color_text);
+}
+
+.list_item_author::before {
+  content: "·";
+  margin-right: 10px;
+}
+
+.list_item_author {
+  color: var(--color_text_muted);
+}
+
+.list_item_title {
+  flex-basis: 100%;
+  font-family: var(--font_title);
+  font-style: italic;
+  color: var(--color_text_muted);
+}
+
+.list_item_content {
+  font-family: var(--font_title);
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--color_text);
+  /* Conserva saltos de línea y espacios tal como se escribieron */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.list_item_content.is_clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.list_item_actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.button_small {
+  width: auto;
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+
+.button_danger_soft {
+  color: #a8201a;
+  border-color: rgba(168, 32, 26, 0.35);
+}
+
+.button_danger {
+  color: #ffffff;
+  background: #b3261e;
+}
+
+.button_danger:hover:not(:disabled) {
+  background: #8f1d17;
+}
+
+/* Diálogo de confirmación */
+dialog {
+  width: min(92vw, 400px);
+  margin: auto;
+  padding: 24px;
+  color: var(--color_text);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--color_glass_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(54, 38, 74, 0.4);
+}
+
+dialog::backdrop {
+  background: rgba(54, 38, 74, 0.5);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.dialog_title {
+  font-family: var(--font_title);
+  font-size: 1.35rem;
+  margin-bottom: 8px;
+}
+
+.dialog_text {
+  margin-bottom: 20px;
+  color: var(--color_text_muted);
+  overflow-wrap: anywhere;
+}
+
+.dialog_actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Paneles desplegables de la pantalla de páginas */
+.panel {
+  margin-bottom: 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(111, 85, 201, 0.22);
+  border-radius: 16px;
+}
+
+.panel > summary,
+.paste_box > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 16px;
+  font-weight: 700;
+  color: var(--color_text);
+  cursor: pointer;
+  list-style: none;
+  border-radius: 16px;
+}
+
+.panel > summary::-webkit-details-marker,
+.paste_box > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Flecha que gira al abrir */
+.panel > summary::after,
+.paste_box > summary::after {
+  content: "";
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  border-right: 2.5px solid var(--color_violet);
+  border-bottom: 2.5px solid var(--color_violet);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.panel[open] > summary::after,
+.paste_box[open] > summary::after {
+  transform: rotate(-135deg);
+}
+
+.panel > summary:focus-visible,
+.paste_box > summary:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+.panel_body {
+  padding: 4px 16px 18px;
+}
+
+.panel_text {
+  margin-bottom: 14px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+.panel_body .button + .button {
+  margin-top: 10px;
+}
+
+.paste_box {
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px dashed rgba(111, 85, 201, 0.35);
+  border-radius: 12px;
+}
+
+.paste_box > summary {
+  min-height: 44px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--color_violet);
+}
+
+.code_area {
+  min-height: 120px;
+  margin: 0 12px 12px;
+  width: calc(100% - 24px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* Selector de archivo y casillas: sobrescriben el estilo general de input */
+input[type="file"] {
+  padding: 10px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button {
+  min-height: 36px;
+  margin-right: 12px;
+  padding: 6px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color_violet);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.5px solid rgba(111, 85, 201, 0.35);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 24px;
+  min-height: 24px;
+  height: 24px;
+  margin-top: 2px;
+  padding: 0;
+  accent-color: var(--color_pink);
+  cursor: pointer;
+}
+
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.error_heading {
+  margin-bottom: 6px;
+}
+
+.error_list {
+  margin-left: 20px;
+  font-weight: 500;
+}
+
+.error_list li + li {
+  margin-top: 4px;
+}
+
+/* Vista previa de la importación */
+.import_preview {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(111, 85, 201, 0.2);
+}
+
+.import_summary {
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--color_text);
+}
+
+.import_list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  margin-bottom: 14px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.import_item {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(111, 85, 201, 0.18);
+  border-radius: 12px;
+  font-size: 0.92rem;
+}
+
+.import_item.is_duplicate {
+  opacity: 0.6;
+}
+
+.import_item_title {
+  margin-bottom: 4px;
+}
+
+.import_item_flag {
+  font-weight: 600;
+  color: #7a4a00;
+}
+
+.import_item_text {
+  font-family: var(--font_title);
+  color: var(--color_text_muted);
+  overflow-wrap: anywhere;
+}
+
+/* Fechas opcionales: una fecha o un periodo */
+.date_group {
+  margin-bottom: 18px;
+}
+
+.date_row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+
+.date_row .field {
+  margin-bottom: 8px;
+}
+
+.field_hint {
+  margin-bottom: 10px;
+  font-size: 0.88rem;
+  color: var(--color_text_muted);
+}
+
+@media (max-width: 480px) {
+  .date_row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Lectura del libro
+   --------------------------------------------------------------------------- */
+.reader_screen {
+  place-items: start center;
+  padding: 20px 12px 32px;
+}
+
+/* Medidas de las páginas. Primero se calculan con vh y, si el navegador lo soporta, con dvh. */
+.reader {
+  --pages_visible: 1;
+  --page_w: min(calc(100vw - 40px), 460px);
+  --page_h: max(380px, min(calc(100vh - 250px), calc(var(--page_w) * 1.65)));
+  --page_h: max(380px, min(calc(100dvh - 250px), calc(var(--page_w) * 1.65)));
+  --paper: #fffdf8;
+  --paper_shade: #eadfc9;
+
+  position: relative;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+@media (min-width: 900px) {
+  .reader {
+    --pages_visible: 2;
+    --page_w: min(calc((100vw - 110px) / 2), 520px);
+    --page_h: max(420px, min(calc(100vh - 260px), calc(var(--page_w) * 1.4)));
+    --page_h: max(420px, min(calc(100dvh - 260px), calc(var(--page_w) * 1.4)));
+  }
+}
+
+.reader_top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.reader_title {
+  flex: 1;
+  font-family: var(--font_title);
+  font-size: 1.35rem;
+  color: var(--color_text);
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.8);
+  outline: none;
+}
+
+.reader_status {
+  min-height: 1.5em;
+  padding: 8px 16px;
+  font-weight: 600;
+  color: var(--color_text);
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+}
+
+.reader_status:empty {
+  display: none;
+}
+
+.book_viewport {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+/* El libro: dos páginas (o una) sobre una tapa de color */
+.book {
+  position: relative;
+  isolation: isolate;
+  width: calc(var(--page_w) * var(--pages_visible));
+  height: var(--page_h);
+  margin: 12px 0;
+  touch-action: pan-y;
+}
+
+.book::before {
+  content: "";
+  position: absolute;
+  inset: -12px -14px;
+  z-index: -1;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #d98ab4 0%, #a98be0 100%);
+  border: 2px solid rgba(255, 220, 140, 0.85);
+  box-shadow: 0 24px 50px rgba(80, 50, 120, 0.35), inset 0 0 0 4px rgba(255, 255, 255, 0.25);
+}
+
+.spread {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.spread.is_jumping {
+  animation: page_fade_in 0.26s ease both;
+}
+
+@keyframes page_fade_in {
+  from {
+    opacity: 0.2;
+  }
+}
+
+/* Página de papel */
+.page {
+  position: relative;
+  flex: 0 0 var(--page_w);
+  display: flex;
+  flex-direction: column;
+  width: var(--page_w);
+  height: var(--page_h);
+  color: var(--color_text);
+  background: var(--paper);
+  overflow: hidden;
+}
+
+/* La sombra del lomo se pinta del lado que toca el centro */
+.page_left {
+  border-radius: 6px 0 0 6px;
+  background: linear-gradient(to left, rgba(120, 90, 60, 0.28) 0%, rgba(120, 90, 60, 0.07) 5%, transparent 14%), var(--paper);
+}
+
+.page_right {
+  border-radius: 0 6px 6px 0;
+  background: linear-gradient(to right, rgba(120, 90, 60, 0.28) 0%, rgba(120, 90, 60, 0.07) 5%, transparent 14%), var(--paper);
+}
+
+.page_single {
+  border-radius: 6px;
+}
+
+/* Grosor del bloque de hojas visible en los bordes exteriores */
+.spread > .page_left {
+  box-shadow: -2px 0 0 #f3e9d6, -4px 0 0 #e9ddc5, -6px 0 0 #f1e6d1, -8px 0 0 #e2d5bb;
+}
+
+.spread > .page_right {
+  box-shadow: 2px 0 0 #f3e9d6, 4px 0 0 #e9ddc5, 6px 0 0 #f1e6d1, 8px 0 0 #e2d5bb;
+}
+
+.page_single:not(.leaf_face .page) {
+  box-shadow: 3px 0 0 #f3e9d6, 6px 0 0 #e9ddc5;
+}
+
+.page.is_blank {
+  background-color: var(--paper);
+}
+
+.spine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3px;
+  transform: translateX(-50%);
+  background: linear-gradient(to right, rgba(90, 60, 30, 0.1), rgba(90, 60, 30, 0.35), rgba(90, 60, 30, 0.1));
+  pointer-events: none;
+}
+
+.page_body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* El relleno inferior deja un margen para que el texto medido siempre quepa sin recortarse */
+  padding: clamp(20px, 4.5vw, 38px) clamp(20px, 4.5vw, 40px) 10px;
+}
+
+.page_number {
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font_title);
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+.page_date {
+  margin-bottom: 4px;
+  font-family: var(--font_title);
+  font-style: italic;
+  font-size: 0.95rem;
+  color: var(--color_pink);
+}
+
+.page_heading {
+  margin-bottom: 4px;
+  font-family: var(--font_title);
+  font-size: 1.45rem;
+  line-height: 1.2;
+  color: var(--color_text);
+  overflow-wrap: anywhere;
+}
+
+.page_ornament {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 16px;
+  font-size: 0.6rem;
+  color: var(--color_gold);
+}
+
+.page_ornament .fa-heart {
+  font-size: 0.8rem;
+  color: var(--color_pink_light);
+}
+
+.page_paragraph {
+  margin-bottom: 0.8em;
+  font-family: var(--font_title);
+  font-size: 1.02rem;
+  line-height: 1.7;
+  /* Conserva los espacios y saltos de línea tal como se escribieron */
+  white-space: pre-wrap;
+  text-align: justify;
+  hyphens: auto;
+  overflow-wrap: anywhere;
+}
+
+/* En una columna estrecha, el texto justificado deja huecos grandes entre palabras */
+@media (max-width: 899px) {
+  .page_paragraph {
+    text-align: left;
+  }
+}
+
+.page_paragraph.has_drop_cap::first-letter {
+  float: left;
+  padding: 0.06em 0.1em 0 0;
+  font-size: 3.1em;
+  font-weight: 700;
+  line-height: 0.85;
+  color: var(--color_pink);
+}
+
+/* Portada, hoja de capítulo y página final */
+.kind_cover .page_body,
+.kind_chapter .page_body,
+.kind_end .page_body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.cover_emblem {
+  font-size: 2.6rem;
+  color: var(--color_pink_light);
+  filter: drop-shadow(0 0 10px rgba(255, 90, 150, 0.45));
+}
+
+.cover_title {
+  margin-top: 14px;
+  font-family: var(--font_title);
+  font-size: clamp(1.7rem, 4vw, 2.3rem);
+  line-height: 1.15;
+  background: linear-gradient(90deg, var(--color_pink), var(--color_violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* La hoja de capítulo lleva una estrella dorada en lugar del corazón de la portada */
+.kind_chapter .cover_emblem {
+  color: var(--color_gold);
+  filter: drop-shadow(0 0 8px rgba(255, 200, 90, 0.5));
+}
+
+.chapter_number {
+  margin-top: 14px;
+  font-family: var(--font_title);
+  font-size: 0.95rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color_text_muted);
+}
+
+.kind_chapter .cover_title {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+/* En la portada el título va arriba del todo, sin separación de más */
+.kind_cover .cover_title {
+  margin-top: 0;
+}
+
+.cover_names {
+  margin-top: 8px;
+  font-family: var(--font_title);
+  font-style: italic;
+  font-size: 1.15rem;
+  color: var(--color_text);
+}
+
+.cover_span {
+  max-width: 24ch;
+  font-family: var(--font_title);
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+.kind_cover .page_ornament,
+.kind_chapter .page_ornament,
+.kind_end .page_ornament {
+  justify-content: center;
+}
+
+/* Hoja que gira: tiene un frente y, en doble página, un reverso */
+.leaf_layer {
+  position: absolute;
+  inset: 0;
+  perspective: 2400px;
+  pointer-events: none;
+}
+
+.leaf {
+  position: absolute;
+  top: 0;
+  width: var(--page_w);
+  height: var(--page_h);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.leaf_forward {
+  left: var(--page_w);
+  transform-origin: left center;
+}
+
+.leaf_backward {
+  left: 0;
+  transform-origin: right center;
+}
+
+.leaf_single_forward,
+.leaf_single_backward {
+  left: 0;
+  transform-origin: left center;
+}
+
+.leaf_face {
+  position: absolute;
+  inset: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.leaf_back {
+  transform: rotateY(180deg);
+}
+
+.leaf_face .page {
+  width: 100%;
+  height: 100%;
+}
+
+.leaf_shade {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(60, 40, 20, 0.5), rgba(60, 40, 20, 0));
+}
+
+.leaf_front .leaf_shade {
+  background: linear-gradient(to left, rgba(60, 40, 20, 0.5), rgba(60, 40, 20, 0));
+}
+
+.leaf_backward .leaf_front .leaf_shade {
+  background: linear-gradient(to right, rgba(60, 40, 20, 0.5), rgba(60, 40, 20, 0));
+}
+
+/* Formulario de capítulos: separado de la lista y alineado como el resto de formularios */
+.chapter_form {
+  margin-bottom: 20px;
+  padding-top: 18px;
+  text-align: left;
+  border-top: 1px solid rgba(111, 85, 201, 0.18);
+}
+
+.chapter_name {
+  flex-basis: 100%;
+  font-family: var(--font_title);
+  font-size: 1.15rem;
+  overflow-wrap: anywhere;
+}
+
+.form_heading {
+  margin-bottom: 14px;
+  font-family: var(--font_title);
+  font-size: 1.2rem;
+  color: var(--color_text);
+  outline: none;
+}
+
+/* Medidor invisible: tiene el tamaño de una página real */
+.page_ruler {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Llegada desde el libro 3D: la lectura se prepara sin verse y, cuando el 3D ya está sobre el libro real,
+   aparece encima. Primero el libro y el título; los controles un poco después, para que todo surja con calma. */
+.reader_top,
+.reader_status,
+.book,
+.reader_controls,
+.reader_hint {
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.reader_controls,
+.reader_hint {
+  transition-delay: 0.3s;
+}
+
+.reader_screen.is_arriving {
+  pointer-events: none;
+}
+
+.reader_screen.is_arriving .reader_top,
+.reader_screen.is_arriving .reader_status,
+.reader_screen.is_arriving .book,
+.reader_screen.is_arriving .reader_controls,
+.reader_screen.is_arriving .reader_hint {
+  opacity: 0;
+}
+
+.reader_screen.is_arriving .reader_controls,
+.reader_screen.is_arriving .reader_hint {
+  transform: translateY(10px);
+}
+
+/* Controles de lectura */
+.reader_controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 560px);
+}
+
+.reader_nav_button {
+  flex: 0 0 52px;
+  width: 52px;
+  min-height: 52px;
+  font-size: 1.1rem;
+  border-radius: 50%;
+}
+
+.reader_nav_button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.reader_progress {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.page_indicator {
+  margin-bottom: 2px;
+  font-family: var(--font_title);
+  font-weight: 700;
+  color: var(--color_text);
+  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.8);
+}
+
+input[type="range"].page_slider {
+  min-height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  accent-color: var(--color_pink);
+  cursor: pointer;
+}
+
+.reader_hint {
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--color_text);
+  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.8);
+}
+
+/* Cómo funciona: explicación breve al inicio de la pantalla de armar el libro */
+/* Pasos numerados del formulario. Los números se cuentan solos y se saltan los pasos ocultos. */
+/* Foto de la página: marco fijo de proporción 4:3, siempre del mismo tamaño */
+.photo_group {
+  margin-bottom: 18px;
+}
+
+.group_label {
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.photo_frame,
+.page_photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  background: #f1e9fa;
+  border: 1px solid rgba(111, 85, 201, 0.25);
+  border-radius: 10px;
+  color: #a18cc8;
+}
+
+.photo_frame {
+  width: min(100%, 340px);
+  margin: 6px auto 10px;
+}
+
+.photo_placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+}
+
+.photo_image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* La foto ya viene recortada a 4:3, así que llena el marco sin deformarse */
+  object-fit: cover;
+  display: block;
+}
+
+.photo_actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* En la página del libro el marco nunca es más alto que una parte de la página */
+.page_photo {
+  width: min(100%, 340px, calc(var(--page_h) * 0.5));
+  margin: 10px auto 14px;
+}
+
+/* Con foto centrada, el adorno de debajo también va centrado */
+.page_photo + .page_ornament {
+  justify-content: center;
+}
+
+.page_photo_icon {
+  font-size: 1.8rem;
+}
+
+.list_item_photo {
+  display: block;
+  width: 96px;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 10px;
+  object-fit: cover;
+  background: #f1e9fa;
+  border-radius: 8px;
+}
+
+/* Filas de botones: el espacio entre ellos lo da "gap". El margen que se usa para apilar botones
+   (form .button + .button) los desnivelaba, así que aquí se anula. Va al final para ganar en especificidad. */
+.photo_actions .button + .button,
+.list_item_actions .button + .button,
+.pager .button + .button {
+  margin-top: 0;
+}
+
+/* Los dos botones de la foto miden lo mismo, aunque sus textos sean distintos */
+.photo_actions .button {
+  flex: 1 1 150px;
+  max-width: 220px;
+  justify-content: center;
+}
+
+/* Inicio: sin tarjeta opaca, para que se vea el libro 3D que se dibuja en el cielo detrás.
+   El texto lleva un halo claro para leerse sobre el cielo. */
+.card_open {
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.card_open::before {
+  display: none;
+}
+
+.card_open .book_title {
+  background: none;
+  -webkit-text-fill-color: var(--color_text);
+  color: var(--color_text);
+  text-shadow: 0 2px 14px rgba(255, 255, 255, 0.95), 0 0 3px rgba(255, 255, 255, 0.8);
+}
+
+.card_open .screen_hint,
+.card_open .button_link {
+  color: var(--color_text);
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.95), 0 0 3px rgba(255, 255, 255, 0.8);
+}
+
+.card_open .screen_hint {
+  margin-bottom: 8px;
+}
+
+/* El espacio que ocupa el libro. El botón encima lo hace tocable y accesible. */
+.home_hero {
+  position: relative;
+  width: min(100%, 280px);
+  height: 300px;
+  margin: 0 auto 18px;
+}
+
+/* El inicio debe caber en pantalla sin desplazarse: el libro ocupa lo que sobra después del título y el menú.
+   Primero con vh y, si el navegador lo soporta, con dvh. */
+.home_hero {
+  height: clamp(150px, calc(100vh - 544px), 300px);
+  height: clamp(150px, calc(100dvh - 544px), 300px);
+}
+
+#home_screen {
+  padding-block: 24px;
+}
+
+/* En pantallas bajas todo el inicio se compacta para seguir sin desplazamiento */
+@media (max-height: 700px) {
+  #home_screen {
+    padding-block: 12px;
+  }
+
+  #home_screen .card {
+    padding: 16px 24px;
+  }
+
+  #home_screen .screen_hint {
+    margin: 6px 0 4px;
+  }
+
+  #home_screen .home_hero {
+    height: clamp(140px, calc(100vh - 444px), 300px);
+    height: clamp(140px, calc(100dvh - 444px), 300px);
+    margin-bottom: 8px;
+  }
+
+  #home_screen .menu {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  #home_screen .button {
+    min-height: 44px;
+  }
+
+  #home_screen .button_link {
+    margin-top: 0;
+  }
+}
+
+.home_book_button {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  color: var(--color_pink);
+  background: none;
+  border: 0;
+  border-radius: 28px;
+  cursor: pointer;
+}
+
+.home_book_button:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 4px;
+}
+
+/* Al pulsar "Leer el libro" el inicio se desvanece (menos el libro) mientras el 3D abre la tapa */
+#home_screen.is_leaving {
+  pointer-events: none;
+}
+
+#home_screen.is_leaving .card_open > :not(.home_hero) {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+/* Dibujo de respaldo: solo se ve si el 3D no está disponible */
+.home_book_fallback {
+  font-size: 6.5rem;
+  color: var(--color_pink);
+  text-shadow: 0 6px 24px rgba(255, 255, 255, 0.9);
+}
+
+.home_book_button.has_3d_book .home_book_fallback {
+  display: none;
+}
+
+/* Movimiento reducido: sin animaciones, todo queda visible y quieto */
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card::before,
+  .book_title,
+  .orbit,
+  .orbit_spin,
+  .heart_shape,
+  .heart_shine {
+    animation: none;
+  }
+
+  .sparkle {
+    animation: none;
+    opacity: 0.75;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+
+  .button,
+  .icon_button,
+  .button_primary::after,
+  .panel > summary::after,
+  .paste_box > summary::after,
+  textarea,
+  input {
+    transition: none;
+  }
+
+  .spread.is_jumping {
+    animation: none;
+  }
+
+}

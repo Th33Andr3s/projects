@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Libro de vida</title>
+  <meta name="description" content="Libro de vida privado de una pareja">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,700;1,500&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+  <!-- Fondo animado en 3D: puramente decorativo, el contenido no depende de él -->
+  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+  <main id="main_content">
+
+    <!-- Estado inicial: mientras se comprueba la sesión no se muestra nada más -->
+    <section id="loading_screen" class="screen" aria-live="polite">
+      <div class="loading_block">
+        <lottie-player class="loading_heart" src="./assets/lottie/loading_heart.json" background="transparent" speed="1" loop autoplay aria-hidden="true"></lottie-player>
+        <p class="loading_text">Abriendo el libro...</p>
+      </div>
+    </section>
+
+    <!-- Acceso: única pantalla visible sin sesión -->
+    <section id="login_screen" class="screen" hidden>
+      <div class="card">
+        <div class="emblem" aria-hidden="true">
+          <svg viewBox="0 0 120 120" focusable="false">
+            <defs>
+              <linearGradient id="heart_gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#ff8db3"/>
+                <stop offset="1" stop-color="#d6336c"/>
+              </linearGradient>
+            </defs>
+            <circle class="orbit orbit_outer" cx="60" cy="60" r="55"/>
+            <circle class="orbit orbit_inner" cx="60" cy="60" r="45"/>
+            <g class="orbit_spin">
+              <circle class="orbit_dot" cx="60" cy="5" r="3"/>
+              <circle class="orbit_dot orbit_dot_small" cx="60" cy="115" r="2"/>
+            </g>
+            <g class="orbit_spin orbit_spin_reverse">
+              <circle class="orbit_dot orbit_dot_pink" cx="15" cy="60" r="2.4"/>
+            </g>
+            <path class="heart_shape" fill="url(#heart_gradient)"
+              d="M60 84 C36 66 29 51 29 42 C29 32 37 26 45 26 C51 26 57 30 60 36 C63 30 69 26 75 26 C83 26 91 32 91 42 C91 51 84 66 60 84 Z"/>
+            <path class="heart_shine" d="M42 38 C42 34 46 32 49 33" />
+          </svg>
+        </div>
+
+        <h1 class="book_title" tabindex="-1">Libro de vida</h1>
+        <div class="divider" aria-hidden="true">
+          <i class="fa-solid fa-star"></i><i class="fa-solid fa-heart"></i><i class="fa-solid fa-star"></i>
+        </div>
+        <p class="screen_hint">Cada día, una página de nuestra historia de amor.</p>
+
+        <form id="login_form" novalidate>
+          <div class="field">
+            <label for="login_email">Correo</label>
+            <input id="login_email" name="email" type="email" autocomplete="username" inputmode="email" required>
+          </div>
+
+          <div class="field">
+            <label for="login_password">Contraseña</label>
+            <div class="password_row">
+              <input id="login_password" name="password" type="password" autocomplete="current-password" required>
+              <button id="toggle_password" class="icon_button" type="button" aria-label="Mostrar contraseña" aria-pressed="false">
+                <i class="fa-solid fa-eye" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          <p id="login_error" class="form_error" role="alert" hidden></p>
+
+          <button id="login_submit" class="button button_primary" type="submit">Entrar</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Las pantallas siguientes no tienen contenido propio hasta sus fases; todas exigen sesión -->
+    <section id="home_screen" class="screen" hidden>
+      <div class="card card_open">
+        <h1 class="book_title" tabindex="-1">Libro de vida</h1>
+        <div class="divider" aria-hidden="true">
+          <i class="fa-solid fa-star"></i><i class="fa-solid fa-heart"></i><i class="fa-solid fa-star"></i>
+        </div>
+        <p id="home_greeting" class="screen_hint"></p>
+
+        <!-- El libro 3D se dibuja en el cielo, justo detrás de este botón. El botón lo hace accesible y tocable.
+             Sin 3D se ve el dibujo de respaldo. -->
+        <div class="home_hero">
+          <button id="home_book_button" class="home_book_button" type="button" aria-label="Abrir la tapa del libro">
+            <span class="home_book_fallback" aria-hidden="true"><i class="fa-solid fa-book-open"></i></span>
+          </button>
+        </div>
+
+        <nav class="menu" aria-label="Menú principal">
+          <button id="open_reading_button" class="button button_primary" type="button">
+            <i class="fa-solid fa-book-open" aria-hidden="true"></i> Leer el libro
+          </button>
+          <button class="button button_primary" type="button" data-go_to="write_screen">
+            <i class="fa-solid fa-pen-nib" aria-hidden="true"></i> Escribir en el libro
+          </button>
+          <button class="button button_secondary" type="button" data-go_to="chapters_screen">
+            <i class="fa-solid fa-bookmark" aria-hidden="true"></i> Capítulos
+          </button>
+          <button class="button button_secondary" type="button" data-go_to="pages_screen">
+            <i class="fa-solid fa-list-check" aria-hidden="true"></i> Páginas y respaldo
+          </button>
+        </nav>
+
+        <button id="logout_button" class="button button_link" type="button">
+          <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Cerrar sesión
+        </button>
+      </div>
+    </section>
+
+    <section id="read_screen" class="screen reader_screen" hidden>
+      <div class="reader">
+        <div class="reader_top">
+          <button class="button button_secondary button_small" type="button" data-go_to="home_screen">
+            <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver
+          </button>
+          <h2 class="reader_title" tabindex="-1">Nuestro libro</h2>
+        </div>
+
+        <p id="reader_status" class="reader_status" role="status" aria-live="polite"></p>
+        <button id="reader_retry" class="button button_secondary button_small" type="button" hidden>
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Reintentar
+        </button>
+
+        <div id="book_viewport" class="book_viewport" hidden>
+          <div id="book" class="book" data-mode="single" role="group" aria-roledescription="libro" aria-label="Libro de vida">
+            <div id="spread" class="spread"></div>
+            <div id="leaf_layer" class="leaf_layer" aria-hidden="true"></div>
+          </div>
+
+          <div class="reader_controls">
+            <button id="page_prev" class="icon_button reader_nav_button" type="button" aria-label="Página anterior">
+              <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <div class="reader_progress">
+              <p id="page_indicator" class="page_indicator" aria-live="polite"></p>
+              <input id="page_slider" class="page_slider" type="range" min="0" max="0" value="0" step="1" aria-label="Moverse por el libro">
+            </div>
+            <button id="page_next" class="icon_button reader_nav_button" type="button" aria-label="Página siguiente">
+              <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p class="reader_hint">Usa las flechas del teclado o desliza el dedo para pasar de página.</p>
+        </div>
+
+        <!-- Página invisible del mismo tamaño que las reales: sirve para medir cuánto texto cabe en cada una -->
+        <div id="page_ruler" class="page_ruler" aria-hidden="true">
+          <article class="page page_single"><div class="page_body"></div><footer class="page_number"></footer></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="write_screen" class="screen" hidden>
+      <div class="card card_wide">
+        <h2 id="write_title" class="screen_title" tabindex="-1">Escribir en el libro</h2>
+        <p id="write_hint" class="screen_hint"></p>
+
+        <form id="write_form" novalidate>
+          <div class="field">
+            <label for="entry_content">Lo que quieres contar</label>
+            <textarea id="entry_content" name="content" rows="9" maxlength="50000" required
+              placeholder="Escribe aquí con calma..."></textarea>
+          </div>
+
+          <div class="field">
+            <label for="entry_title">Título (opcional)</label>
+            <input id="entry_title" name="title" type="text" maxlength="200" autocomplete="off">
+          </div>
+
+          <div class="date_group">
+            <div class="date_row">
+              <div class="field">
+                <label for="write_date">Fecha (opcional)</label>
+                <input id="write_date" name="entry_date" type="date">
+              </div>
+              <div class="field">
+                <label for="write_date_end">Hasta (opcional)</label>
+                <input id="write_date_end" name="entry_date_end" type="date">
+              </div>
+            </div>
+            <p class="field_hint">Si fue un solo día, deja “Hasta” vacío. Para un periodo, elige primero la fecha y luego “Hasta”. La fecha decide el orden de la página en el libro.</p>
+            <button id="clear_dates" class="button button_secondary button_small" type="button">
+              <i class="fa-solid fa-eraser" aria-hidden="true"></i> Quitar fechas
+            </button>
+          </div>
+
+          <div class="photo_group">
+            <p class="group_label">Foto (opcional)</p>
+            <p class="field_hint">Una foto por página. Se recorta al centro para encajar en el marco del libro, que siempre tiene el mismo tamaño.</p>
+            <div class="photo_frame">
+              <img id="photo_preview" class="photo_image" alt="Vista previa de la foto" hidden>
+              <span id="photo_placeholder" class="photo_placeholder"><i class="fa-regular fa-image" aria-hidden="true"></i> Sin foto</span>
+            </div>
+            <div class="photo_actions">
+              <button id="photo_choose" class="button button_secondary button_small" type="button"><i class="fa-solid fa-camera" aria-hidden="true"></i> Elegir foto</button>
+              <button id="photo_remove" class="button button_secondary button_small button_danger_soft" type="button" hidden>
+                <i class="fa-solid fa-trash" aria-hidden="true"></i> Quitar foto
+              </button>
+            </div>
+            <input id="photo_input" type="file" accept="image/*" hidden>
+            <p id="photo_error" class="form_error" role="alert" hidden></p>
+          </div>
+
+          <p id="write_error" class="form_error" role="alert" hidden></p>
+          <p id="write_success" class="form_success" role="status" hidden></p>
+
+          <button id="write_submit" class="button button_primary" type="submit">Guardar en el libro</button>
+          <button id="write_cancel" class="button button_secondary" type="button" hidden>Cancelar edición</button>
+        </form>
+
+        <button class="button button_link" type="button" data-go_to="home_screen">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver
+        </button>
+      </div>
+    </section>
+
+    <section id="chapters_screen" class="screen" hidden>
+      <div class="card card_wide">
+        <h2 class="screen_title" tabindex="-1">Capítulos</h2>
+        <p class="screen_hint">Pon nombre a las etapas de su historia. En el libro, cada capítulo empieza con una hoja con su nombre.</p>
+
+        <p id="chapters_status" class="list_status" role="status" aria-live="polite"></p>
+        <button id="chapters_retry" class="button button_secondary button_small" type="button" hidden>
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Reintentar
+        </button>
+
+        <ul id="chapters_list" class="item_list"></ul>
+
+        <form id="chapter_form" class="chapter_form" novalidate>
+          <h3 id="chapter_form_title" class="form_heading" tabindex="-1">Nuevo capítulo</h3>
+          <div class="field">
+            <label for="chapter_title">Nombre del capítulo</label>
+            <input id="chapter_title" name="title" type="text" maxlength="100" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="chapter_start_date">Empieza el</label>
+            <input id="chapter_start_date" name="start_date" type="date" required>
+            <p class="field_hint">Llega hasta donde empiece el siguiente capítulo. Dos capítulos no pueden empezar el mismo día.</p>
+          </div>
+
+          <p id="chapter_error" class="form_error" role="alert" hidden></p>
+
+          <button id="chapter_submit" class="button button_primary" type="submit">Crear capítulo</button>
+          <button id="chapter_cancel" class="button button_secondary" type="button" hidden>Cancelar edición</button>
+        </form>
+
+        <button class="button button_secondary" type="button" data-go_to="home_screen">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver
+        </button>
+      </div>
+    </section>
+
+    <section id="pages_screen" class="screen" hidden>
+      <div class="card card_wide">
+        <h2 class="screen_title" tabindex="-1">Páginas y respaldo</h2>
+        <p class="screen_hint">Todas las páginas del libro, y las herramientas para revisarlas cada cierto tiempo.</p>
+
+        <p id="pages_status" class="list_status" role="status" aria-live="polite"></p>
+        <button id="pages_retry" class="button button_secondary button_small" type="button" hidden>
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Reintentar
+        </button>
+
+        <details class="panel" open>
+          <summary id="pages_summary">Páginas del libro</summary>
+          <div class="panel_body">
+            <p class="panel_text">Puedes corregir o borrar cualquier página, sea de ustedes dos.</p>
+            <nav class="pager" aria-label="Paginación de la lista" hidden>
+              <button class="button button_secondary button_small" type="button" data-pager="prev">
+                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Anterior
+              </button>
+              <p class="pager_text" aria-live="polite"></p>
+              <button class="button button_secondary button_small" type="button" data-pager="next">
+                Siguiente <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+              </button>
+            </nav>
+            <ul id="pages_list" class="item_list"></ul>
+            <nav class="pager" aria-label="Paginación de la lista" hidden>
+              <button class="button button_secondary button_small" type="button" data-pager="prev">
+                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i> Anterior
+              </button>
+              <p class="pager_text" aria-live="polite"></p>
+              <button class="button button_secondary button_small" type="button" data-pager="next">
+                Siguiente <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+              </button>
+            </nav>
+          </div>
+        </details>
+
+        <details class="panel">
+          <summary>Portada del libro</summary>
+          <div class="panel_body">
+            <p class="panel_text">La portada muestra el título, una foto y los nombres. Se ve en el libro del inicio y en la primera hoja de la lectura.</p>
+            <form id="cover_form" novalidate>
+              <div class="photo_group">
+                <p class="group_label">Foto de la portada</p>
+                <div class="photo_frame">
+                  <img id="cover_photo_preview" class="photo_image" alt="Vista previa de la foto de la portada" hidden>
+                  <span id="cover_photo_placeholder" class="photo_placeholder"><i class="fa-regular fa-image" aria-hidden="true"></i> Sin foto</span>
+                </div>
+                <div class="photo_actions">
+                  <button id="cover_photo_choose" class="button button_secondary button_small" type="button"><i class="fa-solid fa-camera" aria-hidden="true"></i> Elegir foto</button>
+                  <button id="cover_photo_remove" class="button button_secondary button_small button_danger_soft" type="button" hidden><i class="fa-solid fa-trash" aria-hidden="true"></i> Quitar foto</button>
+                </div>
+                <input id="cover_photo_input" type="file" accept="image/*" hidden>
+                <p id="cover_photo_error" class="form_error" role="alert" hidden></p>
+              </div>
+
+              <div class="field">
+                <label for="cover_names">Nombres en la portada</label>
+                <input id="cover_names" name="names" type="text" maxlength="120" autocomplete="off">
+              </div>
+
+              <p id="cover_error" class="form_error" role="alert" hidden></p>
+              <p id="cover_success" class="form_success" role="status" hidden></p>
+              <button id="cover_submit" class="button button_primary" type="submit">Guardar portada</button>
+            </form>
+          </div>
+        </details>
+
+        <details class="panel">
+          <summary>Descargar el libro para revisarlo</summary>
+          <div class="panel_body">
+            <p class="panel_text">Descarga todas las páginas en un archivo. Sirve como respaldo y para revisar la ortografía y las tildes fuera de la aplicación. Las fotos no van en el archivo: quedan guardadas en la aplicación.</p>
+            <button id="export_book" class="button button_primary" type="button">
+              <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i> Descargar el libro
+            </button>
+          </div>
+        </details>
+
+        <details class="panel">
+          <summary>Aplicar correcciones</summary>
+          <div class="panel_body">
+            <p class="panel_text">Sube el archivo con las correcciones ya preparadas. Antes de cambiar nada verás un resumen, y se descargará una copia de seguridad de las páginas que cambiarán.</p>
+
+            <div class="field">
+              <label for="import_file">Archivo de correcciones</label>
+              <input id="import_file" type="file" accept=".json,application/json">
+            </div>
+
+            <details class="paste_box">
+              <summary>O pega el contenido aquí</summary>
+              <label class="visually_hidden" for="import_text">Contenido del archivo de correcciones</label>
+              <textarea id="import_text" class="code_area" rows="6" spellcheck="false" placeholder='{ "format": "book_life_corrections", ... }'></textarea>
+            </details>
+
+            <div id="import_error" class="form_error" role="alert" hidden>
+              <p class="error_heading">No se pudo aplicar:</p>
+              <ul id="import_error_list" class="error_list"></ul>
+            </div>
+
+            <button id="import_review" class="button button_secondary" type="button">
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Revisar
+            </button>
+
+            <div id="import_preview" class="import_preview" hidden>
+              <p id="import_summary" class="import_summary" role="status"></p>
+              <ul id="import_list" class="import_list"></ul>
+              <button id="import_confirm" class="button button_primary" type="button">Aplicar correcciones</button>
+              <button id="import_cancel" class="button button_secondary" type="button">Descartar</button>
+            </div>
+          </div>
+        </details>
+
+        <button class="button button_secondary" type="button" data-go_to="home_screen">
+          <i class="fa-solid fa-arrow-left" aria-hidden="true"></i> Volver
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Celebración al guardar: va fuera de las tarjetas porque su desenfoque rompería el posicionamiento fijo.
+       Es decorativa; el mensaje de texto del formulario es lo que leen los lectores de pantalla. -->
+  <div id="save_celebration" class="celebration" hidden aria-hidden="true">
+    <lottie-player src="./assets/lottie/save_heart.json" background="transparent" speed="1"></lottie-player>
+  </div>
+
+  <!-- Lluvia de corazones al llegar a la última página del libro. Va fuera de las tarjetas, igual que la de guardar. -->
+  <div id="end_celebration" class="celebration celebration_wide" hidden aria-hidden="true">
+    <lottie-player src="./assets/lottie/end_hearts.json" background="transparent" speed="1" preserveAspectRatio="xMidYMid slice"></lottie-player>
+  </div>
+
+  <!-- Confirmación para acciones que no se pueden deshacer. Escape la cierra de forma nativa -->
+  <dialog id="confirm_dialog" aria-labelledby="confirm_title">
+    <form method="dialog">
+      <h2 id="confirm_title" class="dialog_title">¿Borrar esta página?</h2>
+      <p id="confirm_text" class="dialog_text"></p>
+      <div class="dialog_actions">
+        <button class="button button_secondary" type="submit" value="cancel">Cancelar</button>
+        <button class="button button_danger" type="submit" value="confirm">Sí, borrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://unpkg.com/@lottiefiles/lottie-player@2.0.12/dist/lottie-player.js"></script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
