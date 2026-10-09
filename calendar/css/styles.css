@@ -1,0 +1,871 @@
+/* Estilo sobrio: fondo oscuro neutro con un solo acento azul. El foco es ámbar para no confundirse con el acento. */
+:root {
+  --color_background: #0f1720;
+  --color_background_glow: #14305a;
+  --color_card: #17212c;
+  --color_card_edge: #263443;
+  /* Borde de los controles (campos, listas y botones): más claro que el de la tarjeta para que se distingan bien */
+  --color_control_edge: #6a8094;
+  --color_field: #0f1720;
+  --color_chip: #202d3b;
+  --color_text: #e8eef4;
+  --color_text_muted: #9fb0c0;
+  --color_accent: #60a5fa;
+  --color_accent_strong: #93c5fd;
+  --color_on_accent: #08182e;
+  --color_focus: #fbbf24;
+  --color_error: #fda4af;
+  --color_danger: #f87171;
+  /* Los seis colores de evento: se distinguen entre sí y ninguno se confunde con el azul del acento */
+  --color_event_red: #f87171;
+  --color_event_orange: #fb923c;
+  --color_event_green: #4ade80;
+  --color_event_teal: #2dd4bf;
+  --color_event_purple: #c084fc;
+  --color_event_pink: #f472b6;
+  --radius: 16px;
+  --font_ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Hace que las listas, el selector de fecha y el de hora nativos también salgan oscuros */
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* El atributo hidden siempre gana, aunque otra regla defina display */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font_ui);
+  line-height: 1.5;
+  color: var(--color_text);
+  background:
+    radial-gradient(circle at 20% 10%, var(--color_background_glow), transparent 45%),
+    var(--color_background);
+}
+
+.skip_link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+  text-decoration: none;
+}
+
+.skip_link:focus {
+  top: 16px;
+}
+
+/* Texto solo para lectores de pantalla */
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Lienzo 3D de fondo: decorativo, nunca recibe toques */
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  /* La columna nunca pasa del ancho de la pantalla: así, un contenido ancho no estira la página en celular */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: start center;
+  padding: 24px 16px;
+}
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  padding: 24px 20px 20px;
+  background: var(--color_card);
+  border: 1px solid var(--color_card_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.card_header {
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.page_title {
+  font-size: clamp(1.15rem, 5.2vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.page_title .fa-calendar-days {
+  margin-right: 6px;
+  color: var(--color_accent);
+}
+
+.page_subtitle {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+.notice {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  color: var(--color_error);
+  background: var(--color_field);
+  border: 1.5px solid var(--color_error);
+  border-radius: 12px;
+}
+
+/* Vistas: dos pestañas del mismo ancho, con el icono junto al nombre */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.tab {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color_text);
+  cursor: pointer;
+  background: var(--color_chip);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab:hover {
+  border-color: var(--color_accent);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+/* Botones */
+.button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:disabled:active {
+  transform: none;
+}
+
+.button_primary {
+  width: 100%;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.button_primary:hover:not(:disabled) {
+  background: var(--color_accent_strong);
+}
+
+.button_secondary {
+  color: var(--color_text);
+  background: transparent;
+  border-color: var(--color_control_edge);
+}
+
+.button_secondary:hover:not(:disabled) {
+  border-color: var(--color_accent);
+}
+
+.button_danger {
+  color: var(--color_danger);
+  background: transparent;
+  border-color: var(--color_danger);
+}
+
+.button_danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.button_small {
+  min-height: 44px;
+  padding: 6px 14px;
+}
+
+/* Botón cuadrado de 44 px solo con icono */
+.icon_button {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  color: var(--color_text);
+  cursor: pointer;
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+}
+
+.icon_button:hover {
+  border-color: var(--color_accent);
+}
+
+/* Foco siempre visible con teclado */
+.tab:focus-visible,
+.button:focus-visible,
+.icon_button:focus-visible,
+.day_button:focus-visible,
+.upcoming_event:focus-visible,
+select:focus-visible,
+.text_control:focus-visible,
+.option input:focus-visible,
+.color_option input:focus-visible + .color_swatch,
+.skip_link:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+/* ===== Mes ===== */
+.month_layout {
+  display: grid;
+  gap: 18px;
+}
+
+.month_header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.month_title {
+  flex: 1;
+  min-width: 0;
+  font-size: clamp(1rem, 4.6vw, 1.2rem);
+  line-height: 1.25;
+  text-align: center;
+}
+
+.month_grid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.month_grid th {
+  padding: 6px 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color_text_muted);
+  text-align: center;
+}
+
+.month_grid td {
+  padding: 2px;
+}
+
+/* Un día: número arriba y los puntos de sus eventos debajo */
+.day_button {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  padding: 4px 0;
+  font: inherit;
+  color: var(--color_text);
+  cursor: pointer;
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+}
+
+.day_button:hover {
+  border-color: var(--color_control_edge);
+}
+
+.day_number {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+/* Días del mes anterior y siguiente que completan la cuadrícula */
+.day_button.is_outside {
+  color: var(--color_text_muted);
+}
+
+.day_button.is_today .day_number {
+  font-weight: 700;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+/* El día elegido lleva un borde y un fondo, además del color, para verse sin depender de él */
+td[aria-selected="true"] .day_button {
+  background: var(--color_chip);
+  border-color: var(--color_accent);
+}
+
+.day_marks {
+  min-height: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.mark {
+  width: 6px;
+  height: 6px;
+  background: var(--event_color);
+  border-radius: 50%;
+}
+
+.mark_more {
+  font-size: 0.65rem;
+  line-height: 1;
+  color: var(--color_text_muted);
+}
+
+/* El festivo es un anillo, no un punto de color: se distingue por la forma */
+.holiday_mark {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--color_text);
+  border-radius: 50%;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: var(--color_text_muted);
+}
+
+.legend_item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Cada clase de color define el color con el que pintan sus hijos */
+.color_red {
+  --event_color: var(--color_event_red);
+}
+
+.color_orange {
+  --event_color: var(--color_event_orange);
+}
+
+.color_green {
+  --event_color: var(--color_event_green);
+}
+
+.color_teal {
+  --event_color: var(--color_event_teal);
+}
+
+.color_purple {
+  --event_color: var(--color_event_purple);
+}
+
+.color_pink {
+  --event_color: var(--color_event_pink);
+}
+
+/* Detalle del día */
+.day_detail {
+  padding: 14px;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_card_edge);
+  border-radius: 12px;
+}
+
+.day_title {
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.day_holiday {
+  margin-top: 4px;
+  font-size: 0.9rem;
+  color: var(--color_accent_strong);
+}
+
+.day_empty {
+  padding: 10px 0;
+  font-size: 0.9rem;
+  color: var(--color_text_muted);
+}
+
+.event_list {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 12px;
+  list-style: none;
+}
+
+.event_item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 6px 0;
+  background: var(--color_chip);
+  border-radius: 10px;
+}
+
+.event_bar {
+  align-self: stretch;
+  flex: 0 0 5px;
+  background: var(--event_color);
+  border-radius: 10px 0 0 10px;
+}
+
+.event_text {
+  flex: 1;
+  min-width: 0;
+}
+
+.event_title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.event_time {
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+/* ===== Próximos ===== */
+.panel_intro {
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+  color: var(--color_text_muted);
+}
+
+.upcoming_list {
+  display: grid;
+  gap: 18px;
+}
+
+.upcoming_day_title {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.upcoming_holiday {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--color_accent_strong);
+}
+
+.upcoming_events {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  list-style: none;
+}
+
+/* Todo el evento es un botón que abre su edición */
+.upcoming_event {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 6px 12px 6px 0;
+  font: inherit;
+  text-align: left;
+  color: var(--color_text);
+  cursor: pointer;
+  background: var(--color_chip);
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+}
+
+.upcoming_event:hover {
+  border-color: var(--color_accent);
+}
+
+.upcoming_event .event_text {
+  display: grid;
+}
+
+.upcoming_event .event_title {
+  font-weight: 600;
+}
+
+/* Las notas se recortan a una línea en la lista */
+.event_notes {
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upcoming_empty {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+  text-align: center;
+  color: var(--color_text_muted);
+}
+
+/* ===== Respaldo ===== */
+.backup {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color_card_edge);
+}
+
+.backup_text {
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+.backup_buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.backup_buttons .button {
+  flex: 1;
+}
+
+.import_summary {
+  margin-top: 12px;
+  padding: 12px;
+  font-size: 0.9rem;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+.import_summary p {
+  margin-bottom: 10px;
+}
+
+/* ===== Campos ===== */
+.field {
+  margin-bottom: 14px;
+}
+
+.field_row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+select,
+.text_control {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font: inherit;
+  /* 16px evita que iOS haga zoom al enfocar el campo */
+  font-size: 1rem;
+  color: var(--color_text);
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+select {
+  cursor: pointer;
+}
+
+textarea.text_control {
+  min-height: 88px;
+  resize: vertical;
+}
+
+/* Un campo con un valor que no sirve se marca en el color de aviso, además del mensaje bajo el campo */
+.text_control[aria-invalid="true"] {
+  border-color: var(--color_error);
+}
+
+.field_hint {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+.field_error {
+  margin-top: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+.field_error_wide {
+  grid-column: 1 / -1;
+  margin: -8px 0 14px;
+}
+
+/* Casillas: cada opción mide al menos 48 px de alto para tocarla con el dedo */
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin: 0 0 6px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.option input {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--color_accent);
+  cursor: pointer;
+}
+
+/* Selector de color: seis círculos; el elegido lleva un anillo y una marca, no solo el color */
+.color_picker {
+  margin-bottom: 14px;
+  border: 0;
+}
+
+.color_picker legend {
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Seis columnas iguales: en pantallas angostas los círculos se achican un poco en vez de partirse en dos filas */
+.color_options {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 44px));
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.color_option {
+  margin: 0;
+  cursor: pointer;
+}
+
+.color_swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color_on_accent);
+  background: var(--event_color);
+  border: 3px solid transparent;
+  border-radius: 50%;
+}
+
+.color_option input:checked + .color_swatch {
+  border-color: var(--color_text);
+  box-shadow: 0 0 0 2px var(--color_card);
+}
+
+.color_option input:checked + .color_swatch::after {
+  content: "\2713";
+  font-weight: 700;
+}
+
+/* ===== Diálogo ===== */
+.dialog {
+  width: min(92vw, 480px);
+  max-height: 92vh;
+  max-height: 92dvh;
+  margin: auto;
+  padding: 20px;
+  overflow-y: auto;
+  color: var(--color_text);
+  background: var(--color_card);
+  border: 1px solid var(--color_card_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.dialog::backdrop {
+  background: rgba(5, 10, 16, 0.7);
+}
+
+.dialog_title {
+  margin-bottom: 14px;
+  font-size: 1.2rem;
+}
+
+.dialog_buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dialog_buttons .button_primary {
+  width: auto;
+  flex: 1 1 120px;
+}
+
+.dialog_buttons .button {
+  flex: 1 1 100px;
+}
+
+.delete_confirm {
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_danger);
+  border-radius: 12px;
+}
+
+.delete_confirm p {
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+/* Pantallas anchas: la cuadrícula a la izquierda y el detalle del día a la derecha, para que quepa sin desplazarse */
+@media (min-width: 900px) {
+  .card {
+    max-width: 960px;
+  }
+
+  .month_layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: start;
+  }
+}
+
+/* Pantallas muy angostas: menos relleno para que las siete columnas respiren */
+@media (max-width: 380px) {
+  .page {
+    padding-inline: 8px;
+  }
+
+  .card {
+    padding-inline: 12px;
+  }
+
+  .dialog {
+    padding: 14px;
+  }
+
+  /* Inicio y fin de un evento no caben lado a lado en el diálogo: pasan a una columna */
+  .field_row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field_error_wide {
+    margin-top: -8px;
+  }
+}
+
+/* Pantallas bajas (portátiles): menos aire para que el calendario entero quepa sin desplazarse de más */
+@media (max-height: 880px) {
+  .page {
+    padding-block: 12px;
+  }
+
+  .card {
+    padding-block: 16px 14px;
+  }
+
+  .card_header {
+    margin-bottom: 12px;
+  }
+
+  .tabs {
+    margin-bottom: 12px;
+  }
+
+  .day_button {
+    min-height: 48px;
+  }
+
+  .backup {
+    margin-top: 14px;
+    padding-top: 10px;
+  }
+
+  .backup_text {
+    margin-bottom: 8px;
+  }
+}
+
+/* Movimiento reducido: sin transiciones */
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .button {
+    transition: none;
+  }
+
+  .button:active {
+    transform: none;
+  }
+}

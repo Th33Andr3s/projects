@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora financiera</title>
+  <meta name="description" content="Calcula la cuota de un préstamo, el interés simple y compuesto, el ahorro con aportes mensuales y la conversión de tasas.">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Enlace para saltar directo al contenido con teclado -->
+  <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+  <main id="main_content" class="page">
+    <section class="card" aria-labelledby="page_title">
+      <header class="card_header">
+        <h1 id="page_title" class="page_title">
+          <i class="fa-solid fa-coins" aria-hidden="true"></i> Calculadora financiera
+        </h1>
+        <p class="page_subtitle">Préstamos, intereses, ahorro y tasas, en pesos colombianos.</p>
+      </header>
+
+      <!-- Cálculo. El valor de data-calculation es el nombre de la pestaña en js/main.js -->
+      <div class="tabs" role="tablist" aria-label="Cálculo">
+        <button id="tab_loan" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel_loan" data-calculation="loan">
+          <i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i> Préstamo
+        </button>
+        <button id="tab_interest" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_interest" tabindex="-1" data-calculation="interest">
+          <i class="fa-solid fa-chart-line" aria-hidden="true"></i> Interés
+        </button>
+        <button id="tab_saving" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_saving" tabindex="-1" data-calculation="saving">
+          <i class="fa-solid fa-piggy-bank" aria-hidden="true"></i> Ahorro
+        </button>
+        <button id="tab_rates" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_rates" tabindex="-1" data-calculation="rates">
+          <i class="fa-solid fa-percent" aria-hidden="true"></i> Tasas
+        </button>
+      </div>
+
+      <!-- ===== Préstamo ===== -->
+      <div id="panel_loan" class="panel" role="tabpanel" aria-labelledby="tab_loan">
+        <div class="field">
+          <label for="loan_amount">Monto del préstamo</label>
+          <div class="input_group">
+            <span class="input_affix" aria-hidden="true">$</span>
+            <input id="loan_amount" type="text" inputmode="numeric" autocomplete="off" maxlength="15" value="10.000.000">
+          </div>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="loan_rate">Tasa efectiva anual</label>
+            <div class="input_group">
+              <input id="loan_rate" type="text" inputmode="decimal" autocomplete="off" maxlength="8" value="18">
+              <span class="input_affix input_affix_end" aria-hidden="true">% E.A.</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="loan_months">Plazo</label>
+            <div class="input_group">
+              <input id="loan_months" type="text" inputmode="numeric" autocomplete="off" maxlength="3" value="12">
+              <span class="input_affix input_affix_end" aria-hidden="true">meses</span>
+            </div>
+          </div>
+        </div>
+        <p id="loan_hint" class="field_hint">12 meses = 1 año</p>
+        <p id="loan_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <div class="result" role="status">
+          <p class="result_label">Cuota mensual</p>
+          <p class="result_value"><span id="loan_payment" class="result_number">$ 910.464</span></p>
+          <dl class="result_details">
+            <div><dt>Total pagado</dt><dd id="loan_total">$ 10.925.565</dd></div>
+            <div><dt>Total de intereses</dt><dd id="loan_interest">$ 925.565</dd></div>
+            <div><dt>Intereses sobre el total</dt><dd id="loan_share">8,5 %</dd></div>
+          </dl>
+        </div>
+        <p class="note">Cálculo con cuota fija mensual. No incluye seguros, comisiones ni cambios de tasa, así que la cuota de tu banco puede ser mayor.</p>
+
+        <button id="copy_loan_button" class="button button_primary" type="button">
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_loan_label">Copiar cuota</span>
+        </button>
+
+        <details class="table_panel">
+          <summary>Ver tabla mes a mes</summary>
+          <div class="table_scroll" tabindex="0" role="region" aria-label="Tabla de amortización">
+            <table id="amortization_table" class="table">
+              <caption class="visually_hidden">Tabla de amortización del préstamo, mes a mes</caption>
+              <thead>
+                <tr><th scope="col">Mes</th><th scope="col">Cuota</th><th scope="col">Interés</th><th scope="col">Abono a capital</th><th scope="col">Saldo</th></tr>
+              </thead>
+              <tbody>
+              <tr><td>1</td><td>$ 910.464</td><td>$ 138.884</td><td>$ 771.579</td><td>$ 9.228.421</td></tr>
+              <tr><td>2</td><td>$ 910.464</td><td>$ 128.168</td><td>$ 782.295</td><td>$ 8.446.125</td></tr>
+              <tr><td>3</td><td>$ 910.464</td><td>$ 117.303</td><td>$ 793.160</td><td>$ 7.652.965</td></tr>
+              <tr><td>4</td><td>$ 910.464</td><td>$ 106.288</td><td>$ 804.176</td><td>$ 6.848.789</td></tr>
+              <tr><td>5</td><td>$ 910.464</td><td>$ 95.119</td><td>$ 815.345</td><td>$ 6.033.444</td></tr>
+              <tr><td>6</td><td>$ 910.464</td><td>$ 83.795</td><td>$ 826.669</td><td>$ 5.206.775</td></tr>
+              <tr><td>7</td><td>$ 910.464</td><td>$ 72.314</td><td>$ 838.150</td><td>$ 4.368.625</td></tr>
+              <tr><td>8</td><td>$ 910.464</td><td>$ 60.673</td><td>$ 849.790</td><td>$ 3.518.835</td></tr>
+              <tr><td>9</td><td>$ 910.464</td><td>$ 48.871</td><td>$ 861.593</td><td>$ 2.657.242</td></tr>
+              <tr><td>10</td><td>$ 910.464</td><td>$ 36.905</td><td>$ 873.559</td><td>$ 1.783.683</td></tr>
+              <tr><td>11</td><td>$ 910.464</td><td>$ 24.773</td><td>$ 885.691</td><td>$ 897.992</td></tr>
+              <tr><td>12</td><td>$ 910.464</td><td>$ 12.472</td><td>$ 897.992</td><td>$ 0</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <button id="copy_table_button" class="button button_secondary" type="button">
+            <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_table_label">Copiar tabla</span>
+          </button>
+        </details>
+      </div>
+
+      <!-- ===== Interés simple y compuesto ===== -->
+      <div id="panel_interest" class="panel" role="tabpanel" aria-labelledby="tab_interest" hidden>
+        <div class="field">
+          <label for="interest_capital">Capital</label>
+          <div class="input_group">
+            <span class="input_affix" aria-hidden="true">$</span>
+            <input id="interest_capital" type="text" inputmode="numeric" autocomplete="off" maxlength="15" value="1.000.000">
+          </div>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="interest_rate">Tasa efectiva anual</label>
+            <div class="input_group">
+              <input id="interest_rate" type="text" inputmode="decimal" autocomplete="off" maxlength="8" value="10">
+              <span class="input_affix input_affix_end" aria-hidden="true">% E.A.</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="interest_months">Tiempo</label>
+            <div class="input_group">
+              <input id="interest_months" type="text" inputmode="numeric" autocomplete="off" maxlength="3" value="24">
+              <span class="input_affix input_affix_end" aria-hidden="true">meses</span>
+            </div>
+          </div>
+        </div>
+        <p id="interest_hint" class="field_hint">24 meses = 2 años</p>
+        <p id="interest_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <div class="result_pair" role="status">
+          <div class="result">
+            <p class="result_label">Interés simple</p>
+            <p class="result_value result_value_small"><span id="simple_final" class="result_number">$ 1.200.000</span></p>
+            <p class="result_caption">Gana <span id="simple_interest">$ 200.000</span></p>
+            <button id="copy_simple_button" class="button button_secondary button_small" type="button">
+              <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_simple_label">Copiar</span>
+            </button>
+          </div>
+          <div class="result">
+            <p class="result_label">Interés compuesto</p>
+            <p class="result_value result_value_small"><span id="compound_final" class="result_number">$ 1.210.000</span></p>
+            <p class="result_caption">Gana <span id="compound_interest">$ 210.000</span></p>
+            <button id="copy_compound_button" class="button button_secondary button_small" type="button">
+              <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_compound_label">Copiar</span>
+            </button>
+          </div>
+        </div>
+        <p id="interest_sentence" class="note">El compuesto gana $ 10.000 más porque los intereses también generan intereses.</p>
+      </div>
+
+      <!-- ===== Ahorro ===== -->
+      <div id="panel_saving" class="panel" role="tabpanel" aria-labelledby="tab_saving" hidden>
+        <div class="field">
+          <label for="saving_initial">Aporte inicial</label>
+          <div class="input_group">
+            <span class="input_affix" aria-hidden="true">$</span>
+            <input id="saving_initial" type="text" inputmode="numeric" autocomplete="off" maxlength="15" value="1.000.000">
+          </div>
+        </div>
+        <div class="field">
+          <label for="saving_monthly">Aporte mensual</label>
+          <div class="input_group">
+            <span class="input_affix" aria-hidden="true">$</span>
+            <input id="saving_monthly" type="text" inputmode="numeric" autocomplete="off" maxlength="15" value="200.000">
+          </div>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="saving_rate">Tasa efectiva anual</label>
+            <div class="input_group">
+              <input id="saving_rate" type="text" inputmode="decimal" autocomplete="off" maxlength="8" value="12">
+              <span class="input_affix input_affix_end" aria-hidden="true">% E.A.</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="saving_years">Tiempo</label>
+            <div class="input_group">
+              <input id="saving_years" type="text" inputmode="numeric" autocomplete="off" maxlength="2" value="5">
+              <span class="input_affix input_affix_end" aria-hidden="true">años</span>
+            </div>
+          </div>
+        </div>
+        <p id="saving_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <div class="result" role="status">
+          <p class="result_label">Acumulado al final</p>
+          <p class="result_value"><span id="saving_total" class="result_number">$ 17.830.596</span></p>
+          <dl class="result_details">
+            <div><dt>Total aportado</dt><dd id="saving_contributed">$ 13.000.000</dd></div>
+            <div><dt>Intereses ganados</dt><dd id="saving_interest">$ 4.830.596</dd></div>
+          </dl>
+        </div>
+
+        <button id="copy_saving_button" class="button button_primary" type="button">
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_saving_label">Copiar acumulado</span>
+        </button>
+
+        <figure class="chart">
+          <figcaption class="chart_title">Crecimiento año a año</figcaption>
+          <div class="chart_plot">
+            <svg id="saving_chart" class="chart_svg" viewBox="0 0 320 170" role="group" aria-label="Crecimiento del ahorro año a año. Cada punto muestra lo aportado y lo acumulado de ese año."></svg>
+            <div id="chart_tooltip" class="chart_tooltip" hidden></div>
+          </div>
+          <ul class="chart_legend">
+            <li><span class="chart_swatch chart_swatch_contributed" aria-hidden="true"></span> Aportado</li>
+            <li><span class="chart_swatch chart_swatch_total" aria-hidden="true"></span> Acumulado</li>
+            <li class="chart_unit">Eje: años</li>
+          </ul>
+        </figure>
+      </div>
+
+      <!-- ===== Tasas ===== -->
+      <div id="panel_rates" class="panel" role="tabpanel" aria-labelledby="tab_rates" hidden>
+        <div class="field_row">
+          <div class="field">
+            <label for="rates_value">Tasa</label>
+            <div class="input_group">
+              <input id="rates_value" type="text" inputmode="decimal" autocomplete="off" maxlength="8" value="18">
+              <span class="input_affix input_affix_end" aria-hidden="true">%</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="rates_type">Es una tasa</label>
+            <select id="rates_type">
+              <option value="effective_annual" selected>Efectiva anual</option>
+              <option value="nominal_annual">Nominal anual</option>
+              <option value="effective_period">Efectiva del periodo</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="rates_compounding">Se capitaliza</label>
+          <select id="rates_compounding">
+            <option value="12" selected>Mensualmente</option>
+            <option value="6">Bimestralmente</option>
+            <option value="4">Trimestralmente</option>
+            <option value="2">Semestralmente</option>
+          </select>
+        </div>
+        <p id="rates_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <ul class="rates_list" role="status">
+          <li id="rate_item_effective_annual" class="rate_item rate_item_given">
+            <div class="rate_text">
+              <p class="rate_name"><span id="rate_name_effective_annual">Efectiva anual</span> <span class="rate_badge">La que escribiste</span></p>
+              <p id="rate_effective_annual" class="rate_value">18,00 %</p>
+              <p id="rate_formula_effective_annual" class="rate_formula">E.A. = (1 + i)<sup>12</sup> − 1</p>
+            </div>
+            <button id="copy_rate_effective_annual" class="button button_icon_small" type="button" aria-label="Copiar tasa efectiva anual">
+              <i class="fa-regular fa-copy" aria-hidden="true"></i>
+            </button>
+          </li>
+          <li id="rate_item_nominal_annual" class="rate_item">
+            <div class="rate_text">
+              <p class="rate_name"><span id="rate_name_nominal_annual">Nominal anual (mes vencido)</span> <span class="rate_badge" hidden>La que escribiste</span></p>
+              <p id="rate_nominal_annual" class="rate_value">16,67 %</p>
+              <p id="rate_formula_nominal_annual" class="rate_formula">N.A. = i × 12</p>
+            </div>
+            <button id="copy_rate_nominal_annual" class="button button_icon_small" type="button" aria-label="Copiar tasa nominal anual">
+              <i class="fa-regular fa-copy" aria-hidden="true"></i>
+            </button>
+          </li>
+          <li id="rate_item_effective_period" class="rate_item">
+            <div class="rate_text">
+              <p class="rate_name"><span id="rate_name_effective_period">Efectiva mensual</span> <span class="rate_badge" hidden>La que escribiste</span></p>
+              <p id="rate_effective_period" class="rate_value">1,3888 %</p>
+              <p id="rate_formula_effective_period" class="rate_formula">i = (1 + E.A.)<sup>1/12</sup> − 1</p>
+            </div>
+            <button id="copy_rate_effective_period" class="button button_icon_small" type="button" aria-label="Copiar tasa efectiva del periodo">
+              <i class="fa-regular fa-copy" aria-hidden="true"></i>
+            </button>
+          </li>
+        </ul>
+        <p class="note">Son tasas vencidas, las que publican los bancos. Las tasas anticipadas no están incluidas.</p>
+      </div>
+
+      <!-- Avisa a lectores de pantalla cuando se copia algo -->
+      <p id="copy_status" class="visually_hidden" role="status"></p>
+    </section>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

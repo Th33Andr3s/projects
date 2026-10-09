@@ -268,11 +268,11 @@ Un proyecto no se considera terminado hasta cumplir **todo** esto:
 | Carpeta | Proyecto | Descripción |
 |---|---|---|
 | `book_life` | Libro de vida | Libro digital privado de una pareja. Ambos escriben páginas directamente desde el celular, con título, fechas y una foto opcionales; todo se guarda en Supabase tras login y se revisa cada uno o dos meses. Se lee con estética de libro físico, estrellas y 3D. Todo el contenido es privado. |
-| `calendar` | Calendario | Agenda personal con eventos por día. Pendiente de definir en detalle. |
-| `financial_calculator` | Calculadora financiera | Cálculos de intereses, cuotas y amortización. Pendiente de definir en detalle. |
-| `materials_calculator` | Calculadora de materiales | Cálculo de cantidades de materiales para obras o proyectos. Pendiente de definir en detalle. |
-| `measurement_calculator` | Calculadora de medidas | Conversión entre unidades de medida. Pendiente de definir en detalle. |
-| `password_generator` | Generador de contraseñas | Genera contraseñas seguras con opciones configurables. Pendiente de definir en detalle. |
+| `calendar` | Calendario | Agenda personal: calendario de mes con eventos por día (título, hora, color, notas y repetición semanal, mensual o anual), los festivos de Colombia calculados con la ley y una lista de próximos eventos. Se guarda solo en el navegador (`localStorage`), con Exportar e Importar en JSON como respaldo. Fondo 3D sutil. |
+| `financial_calculator` | Calculadora financiera | Cuota de un préstamo con tabla de amortización, interés simple y compuesto, ahorro con aportes mensuales y conversión de tasas, con tasas efectivas anuales y valores en pesos colombianos. Recuerda los últimos valores. Fondo 3D sutil. |
+| `materials_calculator` | Calculadora de materiales | Cuánto material comprar para obras pequeñas, con las presentaciones de Colombia: ladrillos y mortero de un muro, cemento, arena y grava del concreto, pañete y pintura, y baldosa, pegante y boquilla de un piso. Redondea hacia arriba a lo que se compra, permite ajustar el desperdicio y copiar la lista de compras. Recuerda los últimos valores. Fondo 3D sutil. |
+| `measurement_calculator` | Calculadora de medidas | Convierte al instante entre unidades de longitud, masa, volumen, temperatura, área, tiempo, cocina (con pesos por ingrediente), velocidad, datos, energía y presión. Recuerda la última conversión. Fondo 3D sutil. |
+| `password_generator` | Generador de contraseñas | Genera contraseñas seguras al azar con longitud y tipos de caracteres a elegir, y las copia con un toque. No guarda ninguna contraseña; solo recuerda las opciones. Fondo 3D sutil. |
 
 ## 2.13 Cómo agregar un proyecto nuevo
 

@@ -1,0 +1,443 @@
+/* Estilo sobrio: fondo oscuro neutro con un solo acento verde azulado. */
+:root {
+  --color_background: #0f1720;
+  --color_background_glow: #14303a;
+  --color_card: #17212c;
+  --color_card_edge: #263443;
+  /* Borde de los controles (campos y botones): más claro que el de la tarjeta para que se distingan bien */
+  --color_control_edge: #6a8094;
+  --color_field: #0f1720;
+  --color_text: #e8eef4;
+  --color_text_muted: #9fb0c0;
+  --color_accent: #2dd4bf;
+  --color_accent_strong: #5eead4;
+  --color_on_accent: #04201c;
+  --color_focus: #ffb020;
+  --color_digit: #7dd3fc;
+  --color_symbol: #fbbf77;
+  --color_notice: #fbbf77;
+  --color_strength_empty: #2b3a4a;
+  --color_strength_weak: #f87171;
+  --color_strength_fair: #fbbf24;
+  --color_strength_strong: #4ade80;
+  --color_strength_very_strong: #2dd4bf;
+  --radius: 16px;
+  --font_ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font_code: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* El atributo hidden siempre gana, aunque otra regla defina display */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font_ui);
+  line-height: 1.5;
+  color: var(--color_text);
+  background:
+    radial-gradient(circle at 20% 10%, var(--color_background_glow), transparent 45%),
+    var(--color_background);
+}
+
+/* Lienzo 3D de fondo: decorativo, nunca recibe toques */
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.skip_link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+  text-decoration: none;
+}
+
+.skip_link:focus {
+  top: 16px;
+}
+
+/* Texto solo para lectores de pantalla */
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.card {
+  width: 100%;
+  max-width: 480px;
+  padding: 24px 20px 20px;
+  background: var(--color_card);
+  border: 1px solid var(--color_card_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.card_header {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.page_title {
+  font-size: clamp(1.15rem, 5.2vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.page_title .fa-lock {
+  margin-right: 6px;
+  color: var(--color_accent);
+}
+
+.page_subtitle {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+/* Resultado */
+.result {
+  margin-bottom: 22px;
+}
+
+.password_output {
+  min-height: 3.2em;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  font-family: var(--font_code);
+  font-size: clamp(1.15rem, 5.4vw, 1.5rem);
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  /* Un toque selecciona toda la contraseña, para copiarla a mano si hiciera falta */
+  user-select: all;
+  -webkit-user-select: all;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+/* Números y símbolos en otro color para distinguir caracteres parecidos */
+.char_digit {
+  color: var(--color_digit);
+}
+
+.char_symbol {
+  color: var(--color_symbol);
+}
+
+.result_actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.button {
+  flex: 1 1 130px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button_primary {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.button_primary:hover {
+  background: var(--color_accent_strong);
+}
+
+.button_secondary {
+  color: var(--color_text);
+  background: transparent;
+  border-color: var(--color_control_edge);
+}
+
+.button_secondary:hover {
+  border-color: var(--color_accent);
+}
+
+/* Foco siempre visible con teclado */
+.button:focus-visible,
+.length_input:focus-visible,
+.length_slider:focus-visible,
+.option input:focus-visible,
+.password_output:focus-visible,
+.skip_link:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+/* Fortaleza: cuatro segmentos que se llenan según el nivel (data-level de 0 a 4) */
+.strength {
+  --strength_color: var(--color_strength_empty);
+  margin-top: 16px;
+}
+
+.strength[data-level="1"] {
+  --strength_color: var(--color_strength_weak);
+}
+
+.strength[data-level="2"] {
+  --strength_color: var(--color_strength_fair);
+}
+
+.strength[data-level="3"] {
+  --strength_color: var(--color_strength_strong);
+}
+
+.strength[data-level="4"] {
+  --strength_color: var(--color_strength_very_strong);
+}
+
+.strength_bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.strength_bar span {
+  height: 8px;
+  background: var(--color_strength_empty);
+  border-radius: 4px;
+  transition: background-color 0.25s ease;
+}
+
+.strength[data-level="1"] .strength_bar span:nth-child(-n + 1),
+.strength[data-level="2"] .strength_bar span:nth-child(-n + 2),
+.strength[data-level="3"] .strength_bar span:nth-child(-n + 3),
+.strength[data-level="4"] .strength_bar span:nth-child(-n + 4) {
+  background: var(--strength_color);
+}
+
+.strength_text {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
+.strength_label {
+  font-weight: 700;
+  color: var(--strength_color);
+}
+
+.strength[data-level="0"] .strength_label {
+  color: var(--color_text_muted);
+}
+
+.strength_bits {
+  color: var(--color_text_muted);
+}
+
+/* Opciones */
+.options {
+  padding-top: 20px;
+  border-top: 1px solid var(--color_card_edge);
+}
+
+.length_group {
+  margin-bottom: 18px;
+}
+
+.length_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+label,
+legend {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.length_input {
+  width: 84px;
+  min-height: 44px;
+  padding: 6px 10px;
+  font: inherit;
+  /* 16px evita que iOS haga zoom al enfocar el campo */
+  font-size: 1rem;
+  text-align: center;
+  color: var(--color_text);
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 10px;
+}
+
+.length_slider {
+  width: 100%;
+  min-height: 32px;
+  accent-color: var(--color_accent);
+  cursor: pointer;
+}
+
+.types {
+  margin-bottom: 4px;
+  border: 0;
+}
+
+.types legend {
+  margin-bottom: 4px;
+}
+
+/* Cada opción mide al menos 48 px de alto para tocarla con el dedo */
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.option input {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--color_accent);
+  cursor: pointer;
+}
+
+.option_text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+}
+
+.option_example {
+  font-family: var(--font_code);
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+/* "Evitar confusos" es distinto de los tipos de caracteres: va aparte */
+.option_apart {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--color_card_edge);
+}
+
+.notice {
+  margin-top: 10px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color_notice);
+  background: rgba(251, 191, 119, 0.1);
+  border-left: 4px solid var(--color_notice);
+  border-radius: 8px;
+}
+
+.privacy_note {
+  margin-top: 18px;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--color_text_muted);
+}
+
+.privacy_note .fa-shield-halved {
+  margin-right: 4px;
+  color: var(--color_accent);
+}
+
+/* Pantallas bajas (portátiles, celulares): menos aire para que todo entre sin desplazarse de más */
+@media (max-height: 880px) {
+  .page {
+    padding-block: 12px;
+  }
+
+  .card {
+    padding-block: 16px 14px;
+  }
+
+  .card_header {
+    margin-bottom: 12px;
+  }
+
+  .result {
+    margin-bottom: 14px;
+  }
+
+  .options {
+    padding-top: 12px;
+  }
+
+  .length_group {
+    margin-bottom: 8px;
+  }
+
+  .option {
+    min-height: 44px;
+  }
+
+  .privacy_note {
+    margin-top: 10px;
+  }
+}
+
+/* Movimiento reducido: sin transiciones */
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .strength_bar span {
+    transition: none;
+  }
+
+  .button:active {
+    transform: none;
+  }
+}

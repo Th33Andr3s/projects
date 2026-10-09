@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora de materiales</title>
+  <meta name="description" content="Calcula los materiales de una obra pequeña: ladrillos y mortero de un muro, cemento, arena y grava del concreto, pañete y pintura, y baldosa, pegante y boquilla de un piso.">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Enlace para saltar directo al contenido con teclado -->
+  <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+  <main id="main_content" class="page">
+    <section class="card" aria-labelledby="page_title">
+      <header class="card_header">
+        <h1 id="page_title" class="page_title">
+          <i class="fa-solid fa-helmet-safety" aria-hidden="true"></i> Calculadora de materiales
+        </h1>
+        <p class="page_subtitle">Cuánto comprar para tu obra: muro, concreto, pañete, pintura y piso.</p>
+      </header>
+
+      <!-- Trabajo. El valor de data-job es el nombre de la pestaña en js/main.js -->
+      <div class="tabs" role="tablist" aria-label="Trabajo">
+        <button id="tab_wall" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel_wall" data-job="wall">
+          <i class="fa-solid fa-trowel-bricks" aria-hidden="true"></i> Muro
+        </button>
+        <button id="tab_concrete" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_concrete" tabindex="-1" data-job="concrete">
+          <i class="fa-solid fa-cubes" aria-hidden="true"></i> Concreto
+        </button>
+        <button id="tab_finish" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_finish" tabindex="-1" data-job="finish">
+          <i class="fa-solid fa-paint-roller" aria-hidden="true"></i> Pañete y pintura
+        </button>
+        <button id="tab_floor" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_floor" tabindex="-1" data-job="floor">
+          <i class="fa-solid fa-table-cells" aria-hidden="true"></i> Piso
+        </button>
+      </div>
+
+      <!-- ===== Muro ===== -->
+      <div id="panel_wall" class="panel" role="tabpanel" aria-labelledby="tab_wall">
+        <div class="field_row">
+          <div class="field">
+            <label for="wall_length">Largo del muro</label>
+            <div class="input_group">
+              <input id="wall_length" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="5">
+              <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="wall_height">Alto del muro</label>
+            <div class="input_group">
+              <input id="wall_height" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="2,4">
+              <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="wall_piece">Tipo de pieza</label>
+          <select id="wall_piece">
+            <option value="common_brick" selected>Ladrillo tolete común</option>
+            <option value="clay_block_4">Bloque arcilla n.º 4</option>
+            <option value="clay_block_5">Bloque arcilla n.º 5</option>
+            <option value="concrete_block_10">Bloque concreto de 10</option>
+            <option value="concrete_block_15">Bloque concreto de 15</option>
+          </select>
+          <p id="wall_piece_hint" class="field_hint field_hint_below">Cara a la vista de 25 × 6,5 cm, en muro de 12 cm de espesor.</p>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="wall_openings">Puertas y ventanas</label>
+            <div class="input_group">
+              <input id="wall_openings" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="0">
+              <span class="input_affix input_affix_end" aria-hidden="true">m²</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="wall_waste">Desperdicio</label>
+            <div class="input_group">
+              <input id="wall_waste" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="5">
+              <span class="input_affix input_affix_end" aria-hidden="true">%</span>
+            </div>
+          </div>
+        </div>
+        <p class="field_hint">Área neta del muro: <strong id="wall_area">12 m²</strong></p>
+        <p id="wall_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <div id="wall_result" class="result" role="status">
+          <p class="result_label">Lista de materiales</p>
+          <dl class="material_list">
+            <div class="material_row"><dt id="wall_pieces_name">Ladrillos</dt><dd><strong id="wall_pieces">595</strong> <span id="wall_pieces_unit" class="material_unit">piezas</span> <span id="wall_pieces_raw" class="material_raw">(594,3)</span></dd></div>
+            <div class="material_row"><dt>Cemento para la pega</dt><dd><strong id="wall_cement">3</strong> <span id="wall_cement_unit" class="material_unit">bultos de 50 kg</span> <span id="wall_cement_raw" class="material_raw">(2,8)</span></dd></div>
+            <div class="material_row"><dt>Arena para la pega</dt><dd><strong id="wall_sand">0,39</strong> <span class="material_unit">m³</span></dd></div>
+          </dl>
+        </div>
+        <p class="note">Cantidades aproximadas con rendimientos habituales. Confirma con el empaque y compra un poco de más.</p>
+
+        <button id="copy_wall_button" class="button button_primary" type="button">
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_wall_label">Copiar lista</span>
+        </button>
+      </div>
+
+      <!-- ===== Concreto ===== -->
+      <div id="panel_concrete" class="panel" role="tabpanel" aria-labelledby="tab_concrete" hidden>
+        <div class="field_row">
+          <div class="field">
+            <label for="concrete_length">Largo</label>
+            <div class="input_group">
+              <input id="concrete_length" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="0,3">
+              <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="concrete_width">Ancho</label>
+            <div class="input_group">
+              <input id="concrete_width" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="0,3">
+              <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+            </div>
+          </div>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="concrete_height">Alto o espesor</label>
+            <div class="input_group">
+              <input id="concrete_height" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="3">
+              <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="concrete_quantity">Piezas iguales</label>
+            <div class="input_group">
+              <input id="concrete_quantity" type="text" inputmode="numeric" autocomplete="off" maxlength="4" value="4">
+              <span class="input_affix input_affix_end" aria-hidden="true">piezas</span>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="concrete_mix">Dosificación</label>
+          <select id="concrete_mix">
+            <option value="mix_1_2_3" selected>1:2:3 · losas y columnas</option>
+            <option value="mix_1_2_4">1:2:4 · vigas y zapatas</option>
+            <option value="mix_1_3_5">1:3:5 · pisos y solados</option>
+          </select>
+          <p id="concrete_mix_hint" class="field_hint field_hint_below">Para losas, columnas y vigas: concreto de unos 21 MPa (3000 psi).</p>
+        </div>
+        <div class="field">
+          <label for="concrete_waste">Desperdicio</label>
+          <div class="input_group">
+            <input id="concrete_waste" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="5">
+            <span class="input_affix input_affix_end" aria-hidden="true">%</span>
+          </div>
+        </div>
+        <p class="field_hint">Volumen total con desperdicio: <strong id="concrete_volume">1,13 m³</strong></p>
+        <p id="concrete_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <div id="concrete_result" class="result" role="status">
+          <p class="result_label">Lista de materiales</p>
+          <dl class="material_list">
+            <div class="material_row"><dt>Cemento</dt><dd><strong id="concrete_cement">10</strong> <span id="concrete_cement_unit" class="material_unit">bultos de 50 kg</span> <span id="concrete_cement_raw" class="material_raw">(9,6)</span></dd></div>
+            <div class="material_row"><dt>Arena</dt><dd><strong id="concrete_sand">0,62</strong> <span class="material_unit">m³</span></dd></div>
+            <div class="material_row"><dt>Grava</dt><dd><strong id="concrete_gravel">0,91</strong> <span class="material_unit">m³</span></dd></div>
+            <div class="material_row"><dt>Agua</dt><dd><strong id="concrete_water">215</strong> <span class="material_unit">litros</span></dd></div>
+          </dl>
+        </div>
+        <p class="note">Cantidades aproximadas con rendimientos habituales. Confirma con el empaque y compra un poco de más.</p>
+
+        <button id="copy_concrete_button" class="button button_primary" type="button">
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_concrete_label">Copiar lista</span>
+        </button>
+      </div>
+
+      <!-- ===== Pañete y pintura ===== -->
+      <div id="panel_finish" class="panel" role="tabpanel" aria-labelledby="tab_finish" hidden>
+        <fieldset class="options">
+          <legend>Qué calcular</legend>
+          <label class="option" for="finish_include_plaster">
+            <input id="finish_include_plaster" type="checkbox" checked>
+            <span>Pañete</span>
+          </label>
+          <label class="option" for="finish_include_paint">
+            <input id="finish_include_paint" type="checkbox" checked>
+            <span>Pintura</span>
+          </label>
+        </fieldset>
+
+        <div class="field">
+          <label for="finish_area">Área de las paredes</label>
+          <div class="input_group">
+            <input id="finish_area" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="40">
+            <span class="input_affix input_affix_end" aria-hidden="true">m²</span>
+          </div>
+        </div>
+        <details class="helper">
+          <summary>Calcular el área de las paredes</summary>
+          <div class="helper_body">
+            <div class="field_row">
+              <div class="field">
+                <label for="finish_helper_length">Largo total de paredes</label>
+                <div class="input_group">
+                  <input id="finish_helper_length" type="text" inputmode="decimal" autocomplete="off" maxlength="10" placeholder="Ej. 18">
+                  <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="finish_helper_height">Alto</label>
+                <div class="input_group">
+                  <input id="finish_helper_height" type="text" inputmode="decimal" autocomplete="off" maxlength="10" placeholder="Ej. 2,4">
+                  <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+                </div>
+              </div>
+            </div>
+            <div class="field">
+              <label for="finish_helper_openings">Puertas y ventanas</label>
+              <div class="input_group">
+                <input id="finish_helper_openings" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="0">
+                <span class="input_affix input_affix_end" aria-hidden="true">m²</span>
+              </div>
+            </div>
+            <p class="field_hint">Área calculada: <strong id="finish_helper_area">—</strong></p>
+            <p id="finish_helper_error" class="field_hint field_hint_error" role="status" hidden></p>
+            <button id="finish_helper_use" class="button button_secondary" type="button" disabled>Usar esta área</button>
+          </div>
+        </details>
+
+        <div class="field_row">
+          <div class="field">
+            <label for="finish_thickness">Espesor del pañete</label>
+            <div class="input_group">
+              <input id="finish_thickness" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="1,5">
+              <span class="input_affix input_affix_end" aria-hidden="true">cm</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="finish_coats">Manos de pintura</label>
+            <div class="input_group">
+              <input id="finish_coats" type="text" inputmode="numeric" autocomplete="off" maxlength="2" value="2">
+              <span class="input_affix input_affix_end" aria-hidden="true">manos</span>
+            </div>
+          </div>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="finish_yield">Rinde la pintura</label>
+            <div class="input_group">
+              <input id="finish_yield" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="35">
+              <span class="input_affix input_affix_end" aria-hidden="true">m²/gal</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="finish_waste">Desperdicio</label>
+            <div class="input_group">
+              <input id="finish_waste" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="10">
+              <span class="input_affix input_affix_end" aria-hidden="true">%</span>
+            </div>
+          </div>
+        </div>
+        <p id="finish_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <div id="finish_result" class="result" role="status">
+          <p class="result_label">Lista de materiales</p>
+          <div id="finish_plaster_group">
+            <p class="material_group">Pañete</p>
+            <dl class="material_list">
+              <div class="material_row"><dt>Cemento</dt><dd><strong id="finish_cement">6</strong> <span id="finish_cement_unit" class="material_unit">bultos de 50 kg</span> <span id="finish_cement_raw" class="material_raw">(5,3)</span></dd></div>
+              <div class="material_row"><dt>Arena</dt><dd><strong id="finish_sand">0,73</strong> <span class="material_unit">m³</span></dd></div>
+            </dl>
+          </div>
+          <div id="finish_paint_group">
+            <p class="material_group">Pintura</p>
+            <dl class="material_list">
+              <div class="material_row"><dt>Pintura</dt><dd><strong id="finish_paint">3</strong> <span id="finish_paint_unit" class="material_unit">galones</span> <span id="finish_paint_raw" class="material_raw">(2,5)</span></dd></div>
+            </dl>
+            <p id="finish_buckets" class="material_extra" hidden></p>
+          </div>
+        </div>
+        <p class="note">Cantidades aproximadas con rendimientos habituales. Confirma con el empaque y compra un poco de más.</p>
+
+        <button id="copy_finish_button" class="button button_primary" type="button">
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_finish_label">Copiar lista</span>
+        </button>
+      </div>
+
+      <!-- ===== Piso ===== -->
+      <div id="panel_floor" class="panel" role="tabpanel" aria-labelledby="tab_floor" hidden>
+        <div class="field">
+          <label for="floor_area">Área del piso</label>
+          <div class="input_group">
+            <input id="floor_area" type="text" inputmode="decimal" autocomplete="off" maxlength="10" value="20">
+            <span class="input_affix input_affix_end" aria-hidden="true">m²</span>
+          </div>
+        </div>
+        <details class="helper">
+          <summary>Calcular el área del piso</summary>
+          <div class="helper_body">
+            <div class="field_row">
+              <div class="field">
+                <label for="floor_helper_length">Largo</label>
+                <div class="input_group">
+                  <input id="floor_helper_length" type="text" inputmode="decimal" autocomplete="off" maxlength="10" placeholder="Ej. 5">
+                  <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="floor_helper_width">Ancho</label>
+                <div class="input_group">
+                  <input id="floor_helper_width" type="text" inputmode="decimal" autocomplete="off" maxlength="10" placeholder="Ej. 4">
+                  <span class="input_affix input_affix_end" aria-hidden="true">m</span>
+                </div>
+              </div>
+            </div>
+            <p class="field_hint">Área calculada: <strong id="floor_helper_area">—</strong></p>
+            <p id="floor_helper_error" class="field_hint field_hint_error" role="status" hidden></p>
+            <button id="floor_helper_use" class="button button_secondary" type="button" disabled>Usar esta área</button>
+          </div>
+        </details>
+
+        <div class="field">
+          <label for="floor_tile">Tamaño de la baldosa</label>
+          <select id="floor_tile">
+            <option value="tile_30_30">30 × 30 cm</option>
+            <option value="tile_33_33" selected>33 × 33 cm</option>
+            <option value="tile_45_45">45 × 45 cm</option>
+            <option value="tile_60_60">60 × 60 cm</option>
+            <option value="tile_20_60">20 × 60 cm</option>
+            <option value="custom">Otro tamaño</option>
+          </select>
+        </div>
+        <!-- Solo se ve con "Otro tamaño" -->
+        <div id="floor_custom_tile" class="field_row" hidden>
+          <div class="field">
+            <label for="floor_tile_width">Ancho de la baldosa</label>
+            <div class="input_group">
+              <input id="floor_tile_width" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="40">
+              <span class="input_affix input_affix_end" aria-hidden="true">cm</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="floor_tile_length">Largo de la baldosa</label>
+            <div class="input_group">
+              <input id="floor_tile_length" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="40">
+              <span class="input_affix input_affix_end" aria-hidden="true">cm</span>
+            </div>
+          </div>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="floor_thickness">Espesor</label>
+            <div class="input_group">
+              <input id="floor_thickness" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="8">
+              <span class="input_affix input_affix_end" aria-hidden="true">mm</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="floor_joint">Junta</label>
+            <div class="input_group">
+              <input id="floor_joint" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="3">
+              <span class="input_affix input_affix_end" aria-hidden="true">mm</span>
+            </div>
+          </div>
+        </div>
+        <div class="field_row">
+          <div class="field">
+            <label for="floor_box">Caja de baldosa</label>
+            <div class="input_group">
+              <input id="floor_box" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="1,5">
+              <span class="input_affix input_affix_end" aria-hidden="true">m²</span>
+            </div>
+          </div>
+          <div class="field">
+            <label for="floor_waste">Desperdicio</label>
+            <div class="input_group">
+              <input id="floor_waste" type="text" inputmode="decimal" autocomplete="off" maxlength="6" value="10">
+              <span class="input_affix input_affix_end" aria-hidden="true">%</span>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="floor_layout">Instalación (desperdicio sugerido)</label>
+          <select id="floor_layout">
+            <option value="straight" selected>Recta (10 %)</option>
+            <option value="diagonal">En diagonal (15 %)</option>
+          </select>
+        </div>
+        <p id="floor_error" class="field_hint field_hint_error" role="status" hidden></p>
+
+        <div id="floor_result" class="result" role="status">
+          <p class="result_label">Lista de materiales</p>
+          <dl class="material_list">
+            <div class="material_row"><dt>Baldosas</dt><dd><strong id="floor_pieces">203</strong> <span id="floor_pieces_unit" class="material_unit">piezas</span> <span id="floor_pieces_raw" class="material_raw">(202,0)</span></dd></div>
+            <div class="material_row"><dt>Cajas</dt><dd><strong id="floor_boxes">15</strong> <span id="floor_boxes_unit" class="material_unit">cajas</span> <span id="floor_boxes_raw" class="material_raw">(14,7)</span></dd></div>
+            <div class="material_row"><dt>Pegante</dt><dd><strong id="floor_glue">5</strong> <span id="floor_glue_unit" class="material_unit">bultos de 25 kg</span> <span id="floor_glue_raw" class="material_raw">(4,4)</span></dd></div>
+            <div class="material_row"><dt>Boquilla</dt><dd><strong id="floor_grout">5,2</strong> <span class="material_unit">kg</span> <span id="floor_grout_raw" class="material_raw">(5,12)</span></dd></div>
+          </dl>
+        </div>
+        <p class="note">Cantidades aproximadas con rendimientos habituales. Confirma con el empaque y compra un poco de más.</p>
+
+        <button id="copy_floor_button" class="button button_primary" type="button">
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_floor_label">Copiar lista</span>
+        </button>
+      </div>
+
+      <!-- Avisa a lectores de pantalla cuando se copia algo -->
+      <p id="copy_status" class="visually_hidden" role="status"></p>
+    </section>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

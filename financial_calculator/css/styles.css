@@ -1,0 +1,742 @@
+/* Estilo sobrio: fondo oscuro neutro con un solo acento verde. */
+:root {
+  --color_background: #0f1720;
+  --color_background_glow: #123228;
+  --color_card: #17212c;
+  --color_card_edge: #263443;
+  /* Borde de los controles (campos, listas y botones): más claro que el de la tarjeta para que se distingan bien */
+  --color_control_edge: #6a8094;
+  --color_field: #0f1720;
+  --color_chip: #202d3b;
+  --color_text: #e8eef4;
+  --color_text_muted: #9fb0c0;
+  --color_accent: #34d399;
+  --color_accent_strong: #6ee7b7;
+  --color_on_accent: #04241a;
+  --color_secondary: #7dd3fc;
+  --color_focus: #ffb020;
+  --color_error: #fbbf77;
+  --radius: 16px;
+  --font_ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font_code: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  /* Hace que las listas desplegables nativas también salgan oscuras */
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* El atributo hidden siempre gana, aunque otra regla defina display */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font_ui);
+  line-height: 1.5;
+  color: var(--color_text);
+  background:
+    radial-gradient(circle at 20% 10%, var(--color_background_glow), transparent 45%),
+    var(--color_background);
+}
+
+/* Lienzo 3D de fondo: decorativo, nunca recibe toques */
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.skip_link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+  text-decoration: none;
+}
+
+.skip_link:focus {
+  top: 16px;
+}
+
+/* Texto solo para lectores de pantalla */
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  /* La columna nunca pasa del ancho de la pantalla: la tabla de amortización es muy ancha y, sin esto,
+     estiraría la columna y en celular la página se achicaría para caber. */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  padding: 24px 20px 20px;
+  background: var(--color_card);
+  border: 1px solid var(--color_card_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.card_header {
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.page_title {
+  font-size: clamp(1.15rem, 5.2vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.page_title .fa-coins {
+  margin-right: 6px;
+  color: var(--color_accent);
+}
+
+.page_subtitle {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+/* Cálculos: cuatro pestañas del mismo ancho, con el icono sobre el nombre */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.tab {
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color_text);
+  cursor: pointer;
+  background: var(--color_chip);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab:hover {
+  border-color: var(--color_accent);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.tab i {
+  font-size: 1.1rem;
+}
+
+/* Campos */
+.field {
+  margin-bottom: 16px;
+}
+
+/* Tasa y plazo (o tasa y tiempo) van lado a lado: caben incluso en 320 px */
+.field_row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+  /* Si una etiqueta se parte en dos líneas (pantallas muy angostas), las cajas siguen alineadas abajo */
+  align-items: end;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.field_hint {
+  margin: -6px 0 14px;
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+.field_hint_error {
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font: inherit;
+  /* 16px evita que iOS haga zoom al enfocar el campo */
+  font-size: 1rem;
+  color: var(--color_text);
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+select {
+  cursor: pointer;
+}
+
+/* Campo con símbolo delante ($) o detrás (%, meses). El símbolo va dentro del borde del campo. */
+.input_group {
+  display: flex;
+  align-items: stretch;
+  /* La misma altura que una lista desplegable, para que ambos queden alineados */
+  min-height: 48px;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+.input_group input {
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+}
+
+.input_affix {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-weight: 600;
+  color: var(--color_text_muted);
+}
+
+.input_affix_end {
+  padding: 0 12px 0 0;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+/* Un campo con un valor que no sirve se marca en el color de aviso, además del mensaje bajo los campos */
+.input_group.is_invalid {
+  border-color: var(--color_error);
+}
+
+/* El foco se dibuja en el grupo entero, no solo en el campo de adentro */
+.input_group:focus-within {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+.input_group input:focus-visible {
+  outline: none;
+}
+
+/* Botones */
+.button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:disabled:active {
+  transform: none;
+}
+
+.button_primary {
+  width: 100%;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.button_primary:hover:not(:disabled) {
+  background: var(--color_accent_strong);
+}
+
+.button_secondary {
+  width: 100%;
+  color: var(--color_text);
+  background: transparent;
+  border-color: var(--color_control_edge);
+}
+
+.button_secondary:hover:not(:disabled) {
+  border-color: var(--color_accent);
+}
+
+.button_small {
+  min-height: 44px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+
+.button_icon_small {
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  color: var(--color_text);
+  background: transparent;
+  border-color: var(--color_control_edge);
+  border-radius: 50%;
+}
+
+.button_icon_small:hover {
+  border-color: var(--color_accent);
+}
+
+/* Foco siempre visible con teclado */
+.tab:focus-visible,
+.button:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+.table_scroll:focus-visible,
+.skip_link:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+/* Resultados */
+.result {
+  margin: 4px 0 12px;
+  padding: 16px;
+  text-align: center;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+.result_label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color_text_muted);
+}
+
+.result_value {
+  font-size: clamp(1.8rem, 8vw, 2.4rem);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.result_value_small {
+  font-size: clamp(1.3rem, 6vw, 1.7rem);
+}
+
+.result_number {
+  color: var(--color_accent_strong);
+}
+
+.result_caption {
+  margin: 2px 0 10px;
+  font-size: 0.9rem;
+  color: var(--color_text_muted);
+}
+
+.result_details {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color_card_edge);
+  text-align: left;
+}
+
+.result_details div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.95rem;
+}
+
+.result_details dt {
+  color: var(--color_text_muted);
+}
+
+.result_details dd {
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Interés: simple y compuesto, uno sobre otro en celular y lado a lado desde 480 px */
+.result_pair {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 12px;
+}
+
+.note {
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+/* Tabla de amortización: se pliega y se desplaza en horizontal sin estirar la página */
+.table_panel {
+  margin-top: 16px;
+  border-top: 1px solid var(--color_card_edge);
+  padding-top: 12px;
+}
+
+.table_panel summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.table_panel summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Flecha que indica que se despliega, y que gira al abrir */
+.table_panel summary::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  margin: -4px 4px 0 auto;
+  border-right: 2px solid var(--color_text_muted);
+  border-bottom: 2px solid var(--color_text_muted);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.table_panel[open] summary::after {
+  margin-top: 4px;
+  transform: rotate(-135deg);
+}
+
+.table_scroll {
+  margin: 8px 0 12px;
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--color_card_edge);
+  border-radius: 12px;
+}
+
+.table {
+  width: 100%;
+  min-width: 460px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 8px 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table th:first-child,
+.table td:first-child {
+  text-align: center;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color_chip);
+}
+
+.table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Gráfico del ahorro */
+.chart {
+  margin-top: 18px;
+}
+
+.chart_title {
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.chart_svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart_axis {
+  stroke: var(--color_control_edge);
+  stroke-width: 1;
+}
+
+.chart_line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart_line_contributed {
+  stroke: var(--color_secondary);
+}
+
+.chart_line_total {
+  stroke: var(--color_accent);
+}
+
+/* Cada punto del gráfico es un grupo enfocable: un punto visible y un círculo transparente más grande para tocarlo */
+.chart_point {
+  cursor: pointer;
+  outline: none;
+}
+
+.chart_dot {
+  fill: var(--color_accent);
+  stroke: var(--color_card);
+  stroke-width: 2;
+}
+
+.chart_hit {
+  fill: transparent;
+}
+
+.chart_point:hover .chart_dot,
+.chart_point:focus .chart_dot {
+  stroke: var(--color_text);
+}
+
+.chart_point:focus-visible .chart_dot {
+  stroke: var(--color_focus);
+  stroke-width: 4;
+}
+
+.chart_plot {
+  position: relative;
+}
+
+/* Globo con los datos del año: lo posiciona el código sobre el punto */
+.chart_tooltip {
+  position: absolute;
+  z-index: 2;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--color_chip);
+  border: 1px solid var(--color_control_edge);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+.chart_tooltip strong {
+  display: block;
+}
+
+.chart_label {
+  font-size: 12px;
+  fill: var(--color_text_muted);
+}
+
+.chart_legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 6px;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+.chart_swatch {
+  display: inline-block;
+  width: 14px;
+  height: 4px;
+  margin-right: 4px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.chart_swatch_contributed {
+  background: var(--color_secondary);
+}
+
+.chart_swatch_total {
+  background: var(--color_accent);
+}
+
+.chart_unit {
+  margin-left: auto;
+}
+
+/* Tasas: una fila por tasa equivalente, con su fórmula y su botón de copiar */
+.rates_list {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 12px;
+  list-style: none;
+}
+
+.rate_item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_card_edge);
+  border-radius: 12px;
+}
+
+.rate_item_given {
+  border-color: var(--color_accent);
+}
+
+.rate_name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color_text_muted);
+}
+
+.rate_badge {
+  margin-left: 6px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  color: var(--color_on_accent);
+  white-space: nowrap;
+  background: var(--color_accent);
+  border-radius: 999px;
+}
+
+.rate_value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color_accent_strong);
+}
+
+.rate_formula {
+  font-family: var(--font_code);
+  font-size: 0.8rem;
+  color: var(--color_text_muted);
+}
+
+@media (min-width: 480px) {
+  .result_pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Pantallas bajas (portátiles, celulares): menos aire para que todo entre sin desplazarse de más */
+@media (max-height: 880px) {
+  .page {
+    padding-block: 12px;
+  }
+
+  .card {
+    padding-block: 16px 14px;
+  }
+
+  .card_header {
+    margin-bottom: 12px;
+  }
+
+  .tabs {
+    margin-bottom: 12px;
+  }
+
+  .field {
+    margin-bottom: 10px;
+  }
+
+  .field_hint {
+    margin-bottom: 10px;
+  }
+
+  .result {
+    padding-block: 12px;
+  }
+}
+
+/* Portátiles de 768 px de alto: un poco más de aire recortado para que la pestaña de préstamo entre sin desplazarse */
+@media (max-height: 800px) and (min-width: 700px) {
+  .tab {
+    min-height: 48px;
+  }
+
+  .card_header {
+    margin-bottom: 8px;
+  }
+
+  .result {
+    padding-block: 10px;
+  }
+
+  .result_details {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+}
+
+/* Movimiento reducido: sin transiciones */
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .button,
+  .table_panel summary::after {
+    transition: none;
+  }
+
+  .button:active {
+    transform: none;
+  }
+}

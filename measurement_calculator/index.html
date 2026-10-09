@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora de medidas</title>
+  <meta name="description" content="Convierte al instante entre unidades de longitud, masa, volumen, temperatura, cocina, datos y más.">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Enlace para saltar directo al contenido con teclado -->
+  <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+  <main id="main_content" class="page">
+    <section class="card" aria-labelledby="page_title">
+      <header class="card_header">
+        <h1 id="page_title" class="page_title">
+          <i class="fa-solid fa-ruler-combined" aria-hidden="true"></i> Calculadora de medidas
+        </h1>
+        <p class="page_subtitle">Convierte entre unidades al instante.</p>
+      </header>
+
+      <!-- Magnitud. El valor de data-magnitude es la clave de esa magnitud en js/units.js -->
+      <div class="tabs" role="tablist" aria-label="Magnitud">
+        <button id="tab_length" class="tab" type="button" role="tab" aria-selected="true" aria-controls="converter_panel" data-magnitude="length">
+          <i class="fa-solid fa-ruler" aria-hidden="true"></i> Longitud
+        </button>
+        <button id="tab_mass" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="mass">
+          <i class="fa-solid fa-weight-hanging" aria-hidden="true"></i> Masa
+        </button>
+        <button id="tab_volume" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="volume">
+          <i class="fa-solid fa-flask" aria-hidden="true"></i> Volumen
+        </button>
+        <button id="tab_temperature" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="temperature">
+          <i class="fa-solid fa-temperature-half" aria-hidden="true"></i> Temperatura
+        </button>
+        <button id="tab_area" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="area">
+          <i class="fa-solid fa-vector-square" aria-hidden="true"></i> Área
+        </button>
+        <button id="tab_time" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="time">
+          <i class="fa-solid fa-clock" aria-hidden="true"></i> Tiempo
+        </button>
+        <button id="tab_cooking" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="cooking">
+          <i class="fa-solid fa-utensils" aria-hidden="true"></i> Cocina
+        </button>
+        <button id="tab_speed" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="speed">
+          <i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Velocidad
+        </button>
+        <button id="tab_data" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="data">
+          <i class="fa-solid fa-database" aria-hidden="true"></i> Datos
+        </button>
+        <button id="tab_energy" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="energy">
+          <i class="fa-solid fa-bolt" aria-hidden="true"></i> Energía
+        </button>
+        <button id="tab_pressure" class="tab" type="button" role="tab" aria-selected="false" aria-controls="converter_panel" tabindex="-1" data-magnitude="pressure">
+          <i class="fa-solid fa-gauge" aria-hidden="true"></i> Presión
+        </button>
+      </div>
+
+      <div id="converter_panel" class="panel" role="tabpanel" aria-labelledby="tab_length">
+        <!-- Solo se ve en Cocina: con un ingrediente, el gramo entra entre las unidades -->
+        <div id="ingredient_field" class="field" hidden>
+          <label for="ingredient_select">Ingrediente</label>
+          <select id="ingredient_select">
+            <option value="">Solo volumen</option>
+            <option value="water">Agua</option>
+            <option value="milk">Leche</option>
+            <option value="oil">Aceite</option>
+            <option value="butter">Mantequilla</option>
+            <option value="honey">Miel</option>
+            <option value="flour">Harina de trigo</option>
+            <option value="sugar">Azúcar</option>
+            <option value="rice">Arroz crudo</option>
+            <option value="salt">Sal fina</option>
+            <option value="cocoa">Cacao en polvo</option>
+          </select>
+          <p class="field_hint">Los pesos de cocina son aproximados: la harina tamizada pesa menos y la compacta más.</p>
+        </div>
+
+        <div class="field">
+          <label for="value_input">Valor</label>
+          <input id="value_input" class="value_input" type="text" inputmode="decimal" autocomplete="off" maxlength="30" value="1">
+          <p id="value_hint" class="field_hint field_hint_error" role="status" hidden></p>
+        </div>
+
+        <div class="units">
+          <div class="field">
+            <label for="from_select">De</label>
+            <select id="from_select">
+              <option value="millimeter">Milímetro (mm)</option>
+              <option value="centimeter">Centímetro (cm)</option>
+              <option value="meter" selected>Metro (m)</option>
+              <option value="kilometer">Kilómetro (km)</option>
+              <option value="inch">Pulgada (in)</option>
+              <option value="foot">Pie (ft)</option>
+              <option value="yard">Yarda (yd)</option>
+              <option value="mile">Milla (mi)</option>
+              <option value="nautical_mile">Milla náutica (nmi)</option>
+            </select>
+          </div>
+
+          <button id="swap_button" class="button button_icon" type="button" aria-label="Intercambiar unidades">
+            <i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i>
+          </button>
+
+          <div class="field">
+            <label for="to_select">A</label>
+            <select id="to_select">
+              <option value="millimeter">Milímetro (mm)</option>
+              <option value="centimeter">Centímetro (cm)</option>
+              <option value="meter">Metro (m)</option>
+              <option value="kilometer">Kilómetro (km)</option>
+              <option value="inch">Pulgada (in)</option>
+              <option value="foot" selected>Pie (ft)</option>
+              <option value="yard">Yarda (yd)</option>
+              <option value="mile">Milla (mi)</option>
+              <option value="nautical_mile">Milla náutica (nmi)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Resultado: lo que la persona vino a buscar. Se anuncia a lectores de pantalla al cambiar -->
+        <div class="result" role="status">
+          <p class="result_value"><span id="result_number" class="result_number">3,28084</span> <span id="result_symbol" class="result_symbol">ft</span></p>
+          <p id="result_sentence" class="result_sentence">1 metro equivale a 3,28084 pies</p>
+          <p id="result_formula" class="result_formula">1 m = 3,28084 ft</p>
+        </div>
+
+        <button id="copy_button" class="button button_primary" type="button">
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_label">Copiar resultado</span>
+        </button>
+        <!-- Avisa a lectores de pantalla cuando se copia -->
+        <p id="copy_status" class="visually_hidden" role="status"></p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
