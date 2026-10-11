@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador de códigos QR y de barras</title>
+  <meta name="description" content="Crea códigos QR (texto, enlace, Wi-Fi, contacto, WhatsApp) y códigos de barras (Code 128, EAN, UPC, Code 39, ITF-14). Descárgalos en SVG o PNG, cópialos o imprímelos. Todo en tu navegador.">
+  <link rel="icon" href="./assets/icons/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Enlace para saltar directo al contenido con teclado -->
+  <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+  <main id="main_content" class="page">
+    <section class="card" aria-labelledby="page_title">
+      <header class="card_header">
+        <h1 id="page_title" class="page_title">
+          <i class="fa-solid fa-qrcode" aria-hidden="true"></i> Códigos QR y de barras
+        </h1>
+        <p class="page_subtitle">Crea el código, descárgalo o imprímelo. Nada sale de tu navegador.</p>
+      </header>
+
+      <!-- Qué crear. El valor de data-tab es el nombre de la pestaña en js/main.js -->
+      <div class="tabs" role="tablist" aria-label="Qué crear">
+        <button id="tab_qr" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel_qr" data-tab="qr">
+          <i class="fa-solid fa-qrcode" aria-hidden="true"></i> QR
+        </button>
+        <button id="tab_barcode" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_barcode" tabindex="-1" data-tab="barcode">
+          <i class="fa-solid fa-barcode" aria-hidden="true"></i> Código de barras
+        </button>
+      </div>
+
+      <div class="workspace">
+        <!-- ===== Campos y opciones ===== -->
+        <div class="controls">
+          <!-- ===== QR ===== -->
+          <section id="panel_qr" class="panel" role="tabpanel" aria-labelledby="tab_qr">
+            <fieldset id="qr_type_picker" class="type_picker">
+              <legend>Tipo de contenido</legend>
+              <div class="type_options">
+                <label class="type_option" for="qr_type_text">
+                  <input id="qr_type_text" type="radio" name="qr_type" value="text" checked>
+                  <span><i class="fa-solid fa-font" aria-hidden="true"></i> Texto o enlace</span>
+                </label>
+                <label class="type_option" for="qr_type_wifi">
+                  <input id="qr_type_wifi" type="radio" name="qr_type" value="wifi">
+                  <span><i class="fa-solid fa-wifi" aria-hidden="true"></i> Wi-Fi</span>
+                </label>
+                <label class="type_option" for="qr_type_contact">
+                  <input id="qr_type_contact" type="radio" name="qr_type" value="contact">
+                  <span><i class="fa-solid fa-address-card" aria-hidden="true"></i> Contacto</span>
+                </label>
+                <label class="type_option" for="qr_type_whatsapp">
+                  <input id="qr_type_whatsapp" type="radio" name="qr_type" value="whatsapp">
+                  <span><i class="fa-brands fa-whatsapp" aria-hidden="true"></i> WhatsApp</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <!-- Texto o enlace -->
+            <div id="fields_text" class="type_fields">
+              <label for="qr_text">Texto o enlace</label>
+              <textarea id="qr_text" class="text_box" rows="4" spellcheck="false" autocomplete="off" placeholder="Escribe un texto o pega un enlace"></textarea>
+              <p id="qr_counter" class="field_hint">0 caracteres</p>
+            </div>
+
+            <!-- Wi-Fi: la clave nunca se guarda en el equipo -->
+            <div id="fields_wifi" class="type_fields" hidden>
+              <div class="field">
+                <label for="wifi_ssid">Nombre de la red</label>
+                <input id="wifi_ssid" type="text" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="wifi_password">Clave</label>
+                <div class="input_with_button">
+                  <input id="wifi_password" type="password" autocomplete="off" spellcheck="false">
+                  <button id="wifi_password_toggle" class="icon_button" type="button" aria-label="Mostrar la clave" aria-pressed="false">
+                    <i class="fa-regular fa-eye" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="wifi_security">Seguridad</label>
+                <select id="wifi_security">
+                  <option value="WPA" selected>WPA / WPA2</option>
+                  <option value="WEP">WEP</option>
+                  <option value="nopass">Sin clave</option>
+                </select>
+              </div>
+              <label class="option" for="wifi_hidden">
+                <input id="wifi_hidden" type="checkbox">
+                <span>Red oculta</span>
+              </label>
+            </div>
+
+            <!-- Contacto: los datos de otras personas nunca se guardan en el equipo -->
+            <div id="fields_contact" class="type_fields" hidden>
+              <div class="fields">
+                <div class="field">
+                  <label for="contact_first_name">Nombre</label>
+                  <input id="contact_first_name" type="text" autocomplete="off">
+                </div>
+                <div class="field">
+                  <label for="contact_last_name">Apellido</label>
+                  <input id="contact_last_name" type="text" autocomplete="off">
+                </div>
+              </div>
+              <div class="field">
+                <label for="contact_phone">Teléfono</label>
+                <input id="contact_phone" type="tel" inputmode="tel" autocomplete="off" placeholder="+57 300 123 4567">
+              </div>
+              <div class="field">
+                <label for="contact_email">Correo</label>
+                <input id="contact_email" type="email" inputmode="email" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="fields">
+                <div class="field">
+                  <label for="contact_company">Empresa</label>
+                  <input id="contact_company" type="text" autocomplete="off">
+                </div>
+                <div class="field">
+                  <label for="contact_job_title">Cargo</label>
+                  <input id="contact_job_title" type="text" autocomplete="off">
+                </div>
+              </div>
+              <div class="field">
+                <label for="contact_website">Sitio web</label>
+                <input id="contact_website" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://">
+              </div>
+            </div>
+
+            <!-- WhatsApp: el número nunca se guarda en el equipo -->
+            <div id="fields_whatsapp" class="type_fields" hidden>
+              <div class="fields fields_phone">
+                <div class="field">
+                  <label for="whatsapp_country_code">Indicativo</label>
+                  <input id="whatsapp_country_code" type="text" inputmode="numeric" autocomplete="off" value="57">
+                </div>
+                <div class="field">
+                  <label for="whatsapp_number">Número</label>
+                  <input id="whatsapp_number" type="tel" inputmode="tel" autocomplete="off" placeholder="300 123 4567">
+                </div>
+              </div>
+              <div class="field">
+                <label for="whatsapp_message">Mensaje (opcional)</label>
+                <textarea id="whatsapp_message" class="text_box" rows="2" autocomplete="off" placeholder="Hola, quiero más información"></textarea>
+              </div>
+            </div>
+
+            <div class="fields">
+              <div class="field">
+                <label for="qr_level">Corrección de errores</label>
+                <select id="qr_level">
+                  <option value="L">L · 7 %</option>
+                  <option value="M" selected>M · 15 %</option>
+                  <option value="Q">Q · 25 %</option>
+                  <option value="H">H · 30 %</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="qr_size">Tamaño del PNG</label>
+                <select id="qr_size">
+                  <option value="256">256 px</option>
+                  <option value="512" selected>512 px</option>
+                  <option value="1024">1024 px</option>
+                  <option value="2048">2048 px</option>
+                </select>
+              </div>
+            </div>
+            <p class="field_hint">Una corrección más alta lee mejor un código sucio o dañado, pero lo hace más grande.</p>
+          </section>
+
+          <!-- ===== Código de barras ===== -->
+          <section id="panel_barcode" class="panel" role="tabpanel" aria-labelledby="tab_barcode" hidden>
+            <div class="field">
+              <label for="barcode_type">Tipo de código</label>
+              <select id="barcode_type">
+                <option value="code128" selected>Code 128 (letras y números)</option>
+                <option value="ean13">EAN-13 (productos)</option>
+                <option value="ean8">EAN-8 (productos chicos)</option>
+                <option value="upca">UPC-A (productos de EE. UU.)</option>
+                <option value="code39">Code 39 (industrial)</option>
+                <option value="itf14">ITF-14 (cajas)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="barcode_input">Contenido</label>
+              <input id="barcode_input" type="text" autocomplete="off" spellcheck="false" aria-describedby="barcode_hint barcode_value">
+              <p id="barcode_hint" class="field_hint"></p>
+              <p id="barcode_value" class="field_hint" hidden>Se codifica: <span id="barcode_value_text" class="mono"></span></p>
+            </div>
+            <label class="option" for="barcode_show_text">
+              <input id="barcode_show_text" type="checkbox" checked>
+              <span>Mostrar el texto debajo</span>
+            </label>
+            <div class="fields">
+              <div class="field">
+                <label for="barcode_height">Alto de las barras</label>
+                <select id="barcode_height">
+                  <option value="short">Corto</option>
+                  <option value="normal" selected>Normal</option>
+                  <option value="tall">Alto</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="barcode_size">Tamaño del PNG</label>
+                <select id="barcode_size">
+                  <option value="256">256 px</option>
+                  <option value="512" selected>512 px</option>
+                  <option value="1024">1024 px</option>
+                  <option value="2048">2048 px</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <!-- Avisos de lo que falta o sobra; no borran el último código válido -->
+          <div id="form_warning" class="form_warning" role="alert" hidden>
+            <p>
+              <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+              <span id="form_warning_text"></span>
+            </p>
+            <button id="lower_level_button" class="button button_secondary button_small" type="button" hidden></button>
+          </div>
+        </div>
+
+        <!-- ===== Resultado ===== -->
+        <section class="result" aria-labelledby="result_title">
+          <h2 id="result_title" class="result_title">Tu código</h2>
+          <!-- El código siempre va sobre blanco: así se puede escanear aunque la página sea oscura -->
+          <div id="result_box" class="result_box">
+            <div id="code_placeholder" class="code_placeholder">
+              <div id="placeholder_drawing" class="code_holder" aria-hidden="true"></div>
+              <p>Escribe algo para generar tu código</p>
+            </div>
+            <div id="code_holder" class="code_holder" hidden></div>
+          </div>
+          <p id="result_detail" class="result_detail" hidden></p>
+          <p id="result_note" class="result_note" hidden></p>
+        </section>
+
+        <div class="result_actions">
+          <button id="download_svg_button" class="button button_primary" type="button" disabled>
+            <i class="fa-solid fa-download" aria-hidden="true"></i> Descargar SVG
+          </button>
+          <button id="download_png_button" class="button button_primary" type="button" disabled>
+            <i class="fa-solid fa-image" aria-hidden="true"></i> Descargar PNG
+          </button>
+          <button id="copy_button" class="button button_secondary" type="button" disabled>
+            <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_label">Copiar</span>
+          </button>
+          <button id="print_button" class="button button_secondary" type="button" disabled>
+            <i class="fa-solid fa-print" aria-hidden="true"></i> Imprimir
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== Varios a la vez: QR ===== -->
+      <details id="batch_qr" class="batch">
+        <summary>Varios a la vez</summary>
+        <div class="batch_form">
+          <label for="batch_input_qr">Un texto o enlace por línea (hasta 200)</label>
+          <textarea id="batch_input_qr" class="text_box" rows="5" spellcheck="false" autocomplete="off" placeholder="https://ejemplo.com/mesa-1&#10;https://ejemplo.com/mesa-2"></textarea>
+          <p id="batch_count_qr" class="field_hint">0 códigos</p>
+          <button id="print_sheet_qr" class="button button_secondary" type="button" disabled>
+            <i class="fa-solid fa-print" aria-hidden="true"></i> Imprimir hoja
+          </button>
+        </div>
+        <ul id="batch_grid_qr" class="batch_grid"></ul>
+      </details>
+
+      <!-- ===== Varios a la vez: código de barras ===== -->
+      <details id="batch_barcode" class="batch" hidden>
+        <summary>Varios a la vez</summary>
+        <div class="batch_form">
+          <label for="batch_input_barcode">Un contenido por línea (hasta 200), con el tipo de arriba</label>
+          <textarea id="batch_input_barcode" class="text_box" rows="5" spellcheck="false" autocomplete="off" placeholder="PEDIDO-001&#10;PEDIDO-002"></textarea>
+          <p id="batch_count_barcode" class="field_hint">0 códigos</p>
+          <button id="print_sheet_barcode" class="button button_secondary" type="button" disabled>
+            <i class="fa-solid fa-print" aria-hidden="true"></i> Imprimir hoja
+          </button>
+        </div>
+        <ul id="batch_grid_barcode" class="batch_grid"></ul>
+      </details>
+
+      <!-- Avisa a lectores de pantalla cuando el código está listo, se copia o se descarga -->
+      <p id="live_status" class="visually_hidden" role="status"></p>
+
+      <footer class="copyright">
+        <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+      </footer>
+    </section>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
