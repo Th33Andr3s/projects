@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lista de tareas</title>
+    <meta
+      name="description"
+      content="Anota lo que hay que hacer, con fecha y prioridad, y míralo agrupado por cuándo toca: vencidas, hoy, mañana, esta semana. Todo se queda en tu navegador, con respaldo en JSON."
+    />
+    <link rel="icon" href="./assets/icons/favicon.ico" sizes="any" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Enlace para saltar directo al contenido con teclado -->
+    <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+    <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+    <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+    <main id="main_content" class="page">
+      <section class="card" aria-labelledby="page_title">
+        <header class="card_header">
+          <h1 id="page_title" class="page_title">
+            <i class="fa-solid fa-list-check" aria-hidden="true"></i> Lista de
+            tareas
+          </h1>
+          <p id="summary" class="summary">Sin tareas</p>
+        </header>
+
+        <!-- Buscar y filtrar -->
+        <div class="filters">
+          <div class="field field_search">
+            <label for="search_input" class="visually_hidden"
+              >Buscar tareas</label
+            >
+            <input
+              id="search_input"
+              type="search"
+              placeholder="Buscar tareas"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <div class="field field_filter">
+            <label for="filter_select" class="visually_hidden">Mostrar</label>
+            <select id="filter_select">
+              <option value="pending" selected>Pendientes</option>
+              <option value="done">Hechas</option>
+              <option value="all">Todas</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Agregar una tarea -->
+        <form id="add_form" class="add_form" novalidate>
+          <div class="add_row">
+            <label for="title_input" class="visually_hidden">Nueva tarea</label>
+            <input
+              id="title_input"
+              type="text"
+              maxlength="200"
+              placeholder="¿Qué hay que hacer?"
+              autocomplete="off"
+              aria-describedby="add_warning"
+            />
+            <button class="button button_primary" type="submit">
+              <i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar
+            </button>
+          </div>
+          <p id="add_warning" class="warning" role="alert" hidden></p>
+
+          <button
+            id="more_button"
+            class="link_button"
+            type="button"
+            aria-expanded="false"
+            aria-controls="more_options"
+          >
+            <i class="fa-solid fa-chevron-down" aria-hidden="true"></i> Más
+            opciones
+          </button>
+
+          <div id="more_options" class="more_options" hidden>
+            <div class="field">
+              <label for="due_input">Fecha</label>
+              <div class="date_row">
+                <input id="due_input" type="date" />
+                <button
+                  id="due_today_button"
+                  class="button button_secondary button_small"
+                  type="button"
+                >
+                  Hoy
+                </button>
+                <button
+                  id="due_tomorrow_button"
+                  class="button button_secondary button_small"
+                  type="button"
+                >
+                  Mañana
+                </button>
+                <button
+                  id="due_clear_button"
+                  class="button button_secondary button_small"
+                  type="button"
+                >
+                  Quitar
+                </button>
+              </div>
+            </div>
+            <fieldset class="field priority_field">
+              <legend>Prioridad</legend>
+              <div class="segmented">
+                <label class="segment"
+                  ><input type="radio" name="priority" value="high" /><span
+                    >Alta</span
+                  ></label
+                >
+                <label class="segment"
+                  ><input
+                    type="radio"
+                    name="priority"
+                    value="normal"
+                    checked
+                  /><span>Normal</span></label
+                >
+                <label class="segment"
+                  ><input type="radio" name="priority" value="low" /><span
+                    >Baja</span
+                  ></label
+                >
+              </div>
+            </fieldset>
+            <div class="field">
+              <label for="note_input">Nota</label>
+              <textarea
+                id="note_input"
+                rows="2"
+                maxlength="2000"
+                placeholder="Detalles, pasos, direcciones…"
+              ></textarea>
+            </div>
+          </div>
+        </form>
+
+        <!-- Las tareas, agrupadas por cuándo tocan -->
+        <div id="task_groups" class="task_groups"></div>
+        <p id="empty_message" class="empty_message" hidden></p>
+
+        <!-- Hechas: plegada al final -->
+        <details id="done_section" class="done_section" hidden>
+          <summary id="done_summary">Hechas · 0</summary>
+          <ul id="done_list" class="task_list"></ul>
+          <button
+            id="clear_done_button"
+            class="button button_secondary button_small"
+            type="button"
+          >
+            <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Borrar
+            hechas
+          </button>
+        </details>
+
+        <!-- Respaldo -->
+        <div class="backup_row">
+          <button
+            id="export_button"
+            class="button button_secondary button_small"
+            type="button"
+            disabled
+          >
+            <i class="fa-solid fa-file-export" aria-hidden="true"></i> Exportar
+          </button>
+          <button
+            id="import_button"
+            class="button button_secondary button_small"
+            type="button"
+          >
+            <i class="fa-solid fa-file-import" aria-hidden="true"></i> Importar
+          </button>
+          <input
+            id="import_file"
+            type="file"
+            accept=".json,application/json"
+            hidden
+          />
+        </div>
+        <p id="backup_message" class="backup_message" hidden></p>
+        <p id="storage_notice" class="warning" role="alert" hidden>
+          No se pueden guardar las tareas en este navegador: seguirán aquí
+          mientras no cierres la página. Usa Exportar para guardar una copia.
+        </p>
+
+        <!-- Avisa a lectores de pantalla: tarea agregada, hecha, borrada, importada -->
+        <p id="live_status" class="visually_hidden" role="status"></p>
+
+        <footer class="copyright">
+          <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+        </footer>
+      </section>
+    </main>
+
+    <!-- Aviso de deshacer, al pie de la pantalla -->
+    <div id="undo_bar" class="undo_bar" hidden>
+      <span id="undo_text">Tarea borrada</span>
+      <button
+        id="undo_button"
+        class="button button_secondary button_small"
+        type="button"
+      >
+        Deshacer
+      </button>
+    </div>
+
+    <!-- Editar una tarea -->
+    <dialog id="edit_dialog" class="dialog" aria-labelledby="edit_title">
+      <form id="edit_form" novalidate>
+        <h2 id="edit_title" class="dialog_title">Editar tarea</h2>
+        <div class="field">
+          <label for="edit_title_input">Título</label>
+          <input
+            id="edit_title_input"
+            type="text"
+            maxlength="200"
+            autocomplete="off"
+          />
+        </div>
+        <div class="field">
+          <label for="edit_due_input">Fecha</label>
+          <div class="date_row">
+            <input id="edit_due_input" type="date" />
+            <button
+              id="edit_due_today_button"
+              class="button button_secondary button_small"
+              type="button"
+            >
+              Hoy
+            </button>
+            <button
+              id="edit_due_tomorrow_button"
+              class="button button_secondary button_small"
+              type="button"
+            >
+              Mañana
+            </button>
+            <button
+              id="edit_due_clear_button"
+              class="button button_secondary button_small"
+              type="button"
+            >
+              Quitar
+            </button>
+          </div>
+        </div>
+        <fieldset class="field priority_field">
+          <legend>Prioridad</legend>
+          <div class="segmented">
+            <label class="segment"
+              ><input type="radio" name="edit_priority" value="high" /><span
+                >Alta</span
+              ></label
+            >
+            <label class="segment"
+              ><input
+                type="radio"
+                name="edit_priority"
+                value="normal"
+                checked
+              /><span>Normal</span></label
+            >
+            <label class="segment"
+              ><input type="radio" name="edit_priority" value="low" /><span
+                >Baja</span
+              ></label
+            >
+          </div>
+        </fieldset>
+        <div class="field">
+          <label for="edit_note_input">Nota</label>
+          <textarea id="edit_note_input" rows="3" maxlength="2000"></textarea>
+        </div>
+        <p id="edit_warning" class="warning" role="alert" hidden></p>
+        <div class="dialog_buttons">
+          <button class="button button_primary" type="submit">Guardar</button>
+          <button
+            id="edit_cancel_button"
+            class="button button_secondary"
+            type="button"
+          >
+            Cancelar
+          </button>
+          <button
+            id="edit_delete_button"
+            class="button button_secondary button_danger"
+            type="button"
+          >
+            <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Borrar
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Confirmaciones: borrar las hechas e importar un respaldo -->
+    <dialog id="confirm_dialog" class="dialog" aria-labelledby="confirm_text">
+      <p id="confirm_text" class="dialog_text"></p>
+      <div class="dialog_buttons">
+        <button
+          id="confirm_ok_button"
+          class="button button_primary"
+          type="button"
+        >
+          Aceptar
+        </button>
+        <button
+          id="confirm_cancel_button"
+          class="button button_secondary"
+          type="button"
+        >
+          Cancelar
+        </button>
+      </div>
+    </dialog>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>

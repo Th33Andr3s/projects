@@ -1,105 +1,123 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Generador de contraseñas</title>
-  <meta name="description" content="Genera contraseñas seguras al azar, con la longitud y los caracteres que elijas. No se guarda ninguna.">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-  <link rel="stylesheet" href="./css/styles.css">
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-    }
-  }
-  </script>
-</head>
-<body>
-  <!-- Enlace para saltar directo al contenido con teclado -->
-  <a class="skip_link" href="#main_content">Ir al contenido</a>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generador de contraseñas</title>
+    <meta name="description"
+        content="Genera contraseñas seguras al azar, con la longitud y los caracteres que elijas. No se guarda ninguna." />
+    <link rel="icon" href="./assets/icons/favicon.ico" sizes="any" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <script type="importmap">
+          {
+            "imports": {
+              "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+              "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+            }
+          }
+        </script>
+    </head>
+    
+    <body>
+        <!-- Enlace para saltar directo al contenido con teclado -->
+        <a class="skip_link" href="#main_content">Ir al contenido</a>
 
-  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
-  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+    <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+    <canvas id="scene_canvas" aria-hidden="true"></canvas>
 
-  <main id="main_content" class="page">
-    <section class="card" aria-labelledby="page_title">
-      <header class="card_header">
-        <h1 id="page_title" class="page_title">
-          <i class="fa-solid fa-lock" aria-hidden="true"></i> Generador de contraseñas
-        </h1>
-        <p class="page_subtitle">Contraseñas seguras al azar, creadas en tu dispositivo.</p>
-      </header>
+    <main id="main_content" class="page">
+        <section class="card" aria-labelledby="page_title">
+            <header class="card_header">
+                <h1 id="page_title" class="page_title">
+            <i class="fa-solid fa-lock" aria-hidden="true"></i> Generador de
+            contraseñas
+            </h1>
+        <p class="page_subtitle">
+            Contraseñas seguras al azar, creadas en tu dispositivo.
+        </p>
+        </header>
 
-      <!-- Resultado: lo primero que se ve, porque es lo que la persona vino a buscar -->
-      <div class="result">
-        <div id="password_output" class="password_output" role="textbox" aria-readonly="true" aria-label="Contraseña generada" tabindex="0">••••••••••••••••</div>
+        <!-- Resultado: lo primero que se ve, porque es lo que la persona vino a buscar -->
+        <div class="result">
+        <div id="password_output" class="password_output" role="textbox" aria-readonly="true" aria-label="Contraseña generada"
+            tabindex="0">
+            ••••••••••••••••
+        </div>
 
         <div class="result_actions">
-          <button id="copy_button" class="button button_primary" type="button">
-            <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_label">Copiar</span>
-          </button>
-          <button id="regenerate_button" class="button button_secondary" type="button">
-            <i class="fa-solid fa-rotate" aria-hidden="true"></i> Generar otra
-          </button>
-        </div>
-        <!-- Avisa a lectores de pantalla cuando se copia, sin repetir la contraseña -->
-        <p id="copy_status" class="visually_hidden" role="status"></p>
+            <button id="copy_button" class="button button_primary" type="button">
+                <i class="fa-regular fa-copy" aria-hidden="true"></i>
+                <span id="copy_label">Copiar</span>
+            </button>
+            <button id="regenerate_button" class="button button_secondary" type="button">
+                <i class="fa-solid fa-rotate" aria-hidden="true"></i> Generar otra
+            </button>
+            </div>
+            <!-- Avisa a lectores de pantalla cuando se copia, sin repetir la contraseña -->
+            <p id="copy_status" class="visually_hidden" role="status"></p>
 
         <div id="strength" class="strength" data-level="0">
-          <div class="strength_bar" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-          <p class="strength_text">
-            <span id="strength_label" class="strength_label">Fortaleza</span>
-            <span id="strength_bits" class="strength_bits"></span>
-          </p>
-        </div>
-      </div>
+            <div class="strength_bar" aria-hidden="true">
+                <span></span><span></span><span></span><span></span>
+            </div>
+            <p class="strength_text">
+                <span id="strength_label" class="strength_label">Fortaleza</span>
+                <span id="strength_bits" class="strength_bits"></span>
+            </p>
+            </div>
+            </div>
 
-      <!-- Opciones: cualquier cambio genera una contraseña nueva -->
-      <form id="options_form" class="options" novalidate>
-        <div class="length_group">
-          <div class="length_header">
-            <label for="length_slider">Longitud</label>
-            <input id="length_input" class="length_input" type="number" min="8" max="64" value="16" inputmode="numeric" aria-label="Longitud, en número">
-          </div>
-          <input id="length_slider" class="length_slider" type="range" min="8" max="64" value="16">
-        </div>
+        <!-- Opciones: cualquier cambio genera una contraseña nueva -->
+        <form id="options_form" class="options" novalidate>
+            <div class="length_group">
+                <div class="length_header">
+                    <label for="length_slider">Longitud</label>
+            <input id="length_input" class="length_input" type="number" min="8" max="64" value="16" inputmode="numeric"
+                aria-label="Longitud, en número" />
+            </div>
+            <input id="length_slider" class="length_slider" type="range" min="8" max="64" value="16" />
+            </div>
 
         <fieldset class="types">
-          <legend>Caracteres a incluir</legend>
-          <label class="option" for="use_uppercase">
-            <input id="use_uppercase" type="checkbox" checked>
+            <legend>Caracteres a incluir</legend>
+            <label class="option" for="use_uppercase">
+            <input id="use_uppercase" type="checkbox" checked />
             <span class="option_text">Mayúsculas <span class="option_example">A-Z</span></span>
-          </label>
-          <label class="option" for="use_lowercase">
-            <input id="use_lowercase" type="checkbox" checked>
+            </label>
+            <label class="option" for="use_lowercase">
+            <input id="use_lowercase" type="checkbox" checked />
             <span class="option_text">Minúsculas <span class="option_example">a-z</span></span>
-          </label>
-          <label class="option" for="use_numbers">
-            <input id="use_numbers" type="checkbox" checked>
+            </label>
+            <label class="option" for="use_numbers">
+            <input id="use_numbers" type="checkbox" checked />
             <span class="option_text">Números <span class="option_example">0-9</span></span>
-          </label>
-          <label class="option" for="use_symbols">
-            <input id="use_symbols" type="checkbox" checked>
+            </label>
+            <label class="option" for="use_symbols">
+            <input id="use_symbols" type="checkbox" checked />
             <span class="option_text">Símbolos <span class="option_example">!@#$%</span></span>
-          </label>
-        </fieldset>
+            </label>
+            </fieldset>
 
         <label class="option option_apart" for="avoid_confusing">
-          <input id="avoid_confusing" type="checkbox" checked>
-          <span class="option_text">Evitar caracteres confusos <span class="option_example">0 O o 1 l I |</span></span>
-        </label>
+            <input id="avoid_confusing" type="checkbox" checked />
+            <span class="option_text">Evitar caracteres confusos
+                <span class="option_example">0 O o 1 l I |</span></span>
+            </label>
 
         <p id="options_notice" class="notice" role="status" hidden></p>
-      </form>
+        </form>
 
-      <p class="privacy_note">
-        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Nada se guarda ni se envía a ningún servidor.
-      </p>
+        <p class="privacy_note">
+        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Nada se
+        guarda ni se envía a ningún servidor.
+        </p>
+<footer class="copyright">
+    <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+</footer>
     </section>
-  </main>
+    </main>
 
-  <script type="module" src="./js/main.js"></script>
-</body>
+    <script type="module" src="./js/main.js"></script>
+    </body>
 </html>

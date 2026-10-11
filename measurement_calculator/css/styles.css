@@ -385,3 +385,12 @@ select:focus-visible,
     transform: none;
   }
 }
+
+/* Derechos de autor: una línea discreta al pie de la tarjeta */
+.copyright {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--color_text_muted);
+}

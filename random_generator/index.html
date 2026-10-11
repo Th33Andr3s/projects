@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador aleatorio</title>
+  <meta name="description" content="Saca números al azar, elige a alguien de una lista, mézclala, repártela en equipos o tira dados y una moneda. Resultado grande, historial y todo en tu navegador.">
+  <link rel="icon" href="./assets/icons/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="stylesheet" href="./css/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Enlace para saltar directo al contenido con teclado -->
+  <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+  <main id="main_content" class="page">
+    <section class="card" aria-labelledby="page_title">
+      <header class="card_header">
+        <h1 id="page_title" class="page_title">
+          <i class="fa-solid fa-dice" aria-hidden="true"></i> Generador aleatorio
+        </h1>
+        <p class="page_subtitle">Deja el azar decidir, de forma justa. Nada sale de tu navegador.</p>
+      </header>
+
+      <!-- Qué sortear. El valor de data-tab es el nombre de la pestaña en js/main.js -->
+      <div class="tabs" role="tablist" aria-label="Qué sortear">
+        <button id="tab_numbers" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel_numbers" data-tab="numbers">
+          <i class="fa-solid fa-hashtag" aria-hidden="true"></i> Números
+        </button>
+        <button id="tab_list" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_list" tabindex="-1" data-tab="list">
+          <i class="fa-solid fa-list-ul" aria-hidden="true"></i> Lista
+        </button>
+        <button id="tab_dice" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_dice" tabindex="-1" data-tab="dice">
+          <i class="fa-solid fa-dice" aria-hidden="true"></i> Dados y moneda
+        </button>
+      </div>
+
+      <!-- ===== Números ===== -->
+      <section id="panel_numbers" class="panel" role="tabpanel" aria-labelledby="tab_numbers">
+        <div class="fields">
+          <div class="field">
+            <label for="numbers_minimum">Mínimo</label>
+            <input id="numbers_minimum" type="number" inputmode="numeric" step="1" value="1" data-enter="draw_numbers">
+          </div>
+          <div class="field">
+            <label for="numbers_maximum">Máximo</label>
+            <input id="numbers_maximum" type="number" inputmode="numeric" step="1" value="100" data-enter="draw_numbers">
+          </div>
+          <div class="field">
+            <label for="numbers_count">Cantidad</label>
+            <input id="numbers_count" type="number" inputmode="numeric" step="1" min="1" value="1" data-enter="draw_numbers">
+          </div>
+        </div>
+        <div class="options_row">
+          <label class="option" for="numbers_unique">
+            <input id="numbers_unique" type="checkbox" checked>
+            <span>Sin repetir</span>
+          </label>
+          <label class="option" for="numbers_sorted">
+            <input id="numbers_sorted" type="checkbox">
+            <span>Ordenar de menor a mayor</span>
+          </label>
+        </div>
+        <button id="draw_numbers" class="button button_primary button_big action_button" type="button">
+          <i class="fa-solid fa-dice" aria-hidden="true"></i> <span id="draw_numbers_label">Sacar número</span>
+        </button>
+      </section>
+
+      <!-- ===== Lista ===== -->
+      <section id="panel_list" class="panel" role="tabpanel" aria-labelledby="tab_list" hidden>
+        <label for="list_input">Lista</label>
+        <textarea id="list_input" class="list_box" rows="6" spellcheck="false" autocomplete="off" placeholder="Escribe un nombre por línea"></textarea>
+        <p id="list_count" class="list_count">0 elementos</p>
+        <div class="fields">
+          <div class="field">
+            <label for="list_pick_count">Cuántos elegir</label>
+            <input id="list_pick_count" type="number" inputmode="numeric" step="1" min="1" value="1" data-enter="pick_from_list">
+          </div>
+          <div class="field">
+            <label for="list_teams">Equipos</label>
+            <input id="list_teams" type="number" inputmode="numeric" step="1" min="2" max="20" value="2" data-enter="split_list">
+          </div>
+        </div>
+        <label class="option" for="list_remove_picked">
+          <input id="list_remove_picked" type="checkbox">
+          <span>Quitar de la lista a quien salga</span>
+        </label>
+        <div class="button_row">
+          <button id="pick_from_list" class="button button_primary button_big action_button" type="button">
+            <i class="fa-solid fa-hand-pointer" aria-hidden="true"></i> Elegir
+          </button>
+          <button id="shuffle_list" class="button button_secondary action_button" type="button">
+            <i class="fa-solid fa-shuffle" aria-hidden="true"></i> Mezclar
+          </button>
+          <button id="split_list" class="button button_secondary action_button" type="button">
+            <i class="fa-solid fa-people-group" aria-hidden="true"></i> Repartir en equipos
+          </button>
+        </div>
+      </section>
+
+      <!-- ===== Dados y moneda ===== -->
+      <section id="panel_dice" class="panel" role="tabpanel" aria-labelledby="tab_dice" hidden>
+        <div class="fields">
+          <div class="field">
+            <label for="dice_count">Dados</label>
+            <input id="dice_count" type="number" inputmode="numeric" step="1" min="1" max="10" value="1" data-enter="roll_dice_button">
+          </div>
+          <div class="field">
+            <label for="dice_faces">Caras</label>
+            <select id="dice_faces" data-enter="roll_dice_button">
+              <option value="4">4</option>
+              <option value="6" selected>6</option>
+              <option value="8">8</option>
+              <option value="10">10</option>
+              <option value="12">12</option>
+              <option value="20">20</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+        <button id="roll_dice_button" class="button button_primary button_big action_button" type="button">
+          <i class="fa-solid fa-dice" aria-hidden="true"></i> Tirar dados
+        </button>
+
+        <div class="fields coin_fields">
+          <div class="field">
+            <label for="coin_count">Monedas</label>
+            <input id="coin_count" type="number" inputmode="numeric" step="1" min="1" max="10" value="1" data-enter="flip_coin_button">
+          </div>
+        </div>
+        <button id="flip_coin_button" class="button button_primary button_big action_button" type="button">
+          <i class="fa-solid fa-coins" aria-hidden="true"></i> Lanzar moneda
+        </button>
+      </section>
+
+      <!-- Avisos de lo que falta o sobra en las opciones; no borran el resultado anterior -->
+      <p id="form_warning" class="form_warning" role="alert" hidden>
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        <span id="form_warning_text"></span>
+      </p>
+
+      <!-- ===== Resultado ===== -->
+      <section class="result" aria-labelledby="result_title">
+        <h2 id="result_title" class="result_title">Resultado</h2>
+        <div id="result_box" class="result_box">
+          <p id="result_placeholder" class="result_placeholder">Aquí aparece el resultado</p>
+          <div id="result_content" class="result_content" hidden></div>
+        </div>
+        <p id="result_detail" class="result_detail" hidden></p>
+
+        <button id="copy_button" class="button button_secondary copy_button" type="button" disabled>
+          <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_label">Copiar</span>
+        </button>
+
+        <!-- Si el navegador no deja copiar, el texto se muestra aquí, seleccionado -->
+        <div id="copy_fallback" class="copy_fallback" hidden>
+          <label for="copy_fallback_text">Texto para copiar a mano</label>
+          <textarea id="copy_fallback_text" class="list_box" rows="3" readonly spellcheck="false"></textarea>
+        </div>
+      </section>
+
+      <!-- ===== Historial ===== -->
+      <details id="history_section" class="history">
+        <summary id="history_summary">Historial (0)</summary>
+        <p id="history_empty" class="history_empty">Todavía no hay tiradas.</p>
+        <ol id="history_list" class="history_list" tabindex="0" aria-label="Tiradas anteriores" hidden></ol>
+        <div class="button_row history_buttons">
+          <button id="copy_history_button" class="button button_secondary button_small" type="button" disabled>
+            <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_history_label">Copiar historial</span>
+          </button>
+          <button id="clear_history_button" class="button button_secondary button_small" type="button" disabled>
+            <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Borrar historial
+          </button>
+        </div>
+      </details>
+
+      <!-- Avisa a lectores de pantalla el resultado al terminar la tirada, y cuando se copia o se borra algo -->
+      <p id="live_status" class="visually_hidden" role="status"></p>
+
+      <footer class="copyright">
+        <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+      </footer>
+    </section>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

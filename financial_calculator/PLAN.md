@@ -201,3 +201,8 @@ Además:
 2. En **GitHub Pages**, tras publicar: abrir `https://<usuario>.github.io/projects/financial_calculator/` y comprobar que carga sin errores, con iconos y fondo, y que Copiar funciona (el portapapeles solo funciona con https).
 3. Activar "reducir movimiento" en el sistema y comprobar que el fondo queda quieto.
 4. **Comparar con tu banco:** calcular un crédito real tuyo y comparar la cuota. Debe coincidir salvo seguros y comisiones; si la diferencia es mayor, suele deberse a que el banco publica la tasa nominal o a que cobra cuota de manejo.
+
+### Actualización posterior: favicon y copyright
+
+Se agregó el favicon de la marca (`assets/icons/favicon.ico`, enlazado en el `<head>`) y el pie de copyright con el texto de CLAUDE.md 2.16. El pie suma unos 30 px de alto (el doble de línea en pantallas muy angostas, donde el texto se parte en dos), así que los píxeles de desplazamiento medidos antes en este documento aumentan en esa medida. En 1366×768 la pestaña Préstamo, que antes cabía justa, ahora necesita 24 px de desplazamiento.
+

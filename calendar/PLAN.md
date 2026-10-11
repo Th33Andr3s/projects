@@ -220,3 +220,8 @@ Además:
 4. Activar "reducir movimiento" en el sistema y comprobar que el fondo queda quieto.
 5. **Comparar con un calendario oficial** de Colombia: revisar los festivos del año en curso y del siguiente (en 2025 y 2030, por ejemplo, el Sagrado Corazón y San Pedro y San Pablo caen el mismo lunes y el día muestra los dos nombres).
 6. Dejar la página abierta de un día para otro y volver a ella: el círculo de "hoy" debe pasar al día nuevo.
+
+### Actualización posterior: favicon y copyright
+
+Se agregó el favicon de la marca (`assets/icons/favicon.ico`, enlazado en el `<head>`) y el pie de copyright con el texto de CLAUDE.md 2.16. El pie suma unos 30 px de alto (el doble de línea en pantallas muy angostas, donde el texto se parte en dos), así que los píxeles de desplazamiento medidos antes en este documento aumentan en esa medida. En 1366×768 el mes sigue cabiendo entero sin desplazarse.
+

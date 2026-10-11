@@ -455,3 +455,8 @@ Revisión técnica hecha con la aplicación corriendo contra una base simulada y
 2. En **GitHub Pages**, tras publicar: abrir `https://<usuario>.github.io/projects/book_life/`, comprobar que carga sin errores, que las tipografías y el 3D aparecen y que entrar funciona. Si algo se ve como antes, recargar con Ctrl y F5.
 3. En Supabase, **Authentication → URL Configuration**: poner la dirección de GitHub Pages como Site URL.
 4. Descargar el libro una vez y guardar el archivo como primera copia de seguridad.
+
+### Actualización posterior: favicon y copyright
+
+Se agregó el favicon de la marca (`assets/icons/favicon.ico`, enlazado en el `<head>`) y el pie de copyright con el texto de CLAUDE.md 2.16. El pie suma unos 30 px de alto (el doble de línea en pantallas muy angostas, donde el texto se parte en dos), así que los píxeles de desplazamiento medidos antes en este documento aumentan en esa medida. En la pantalla de acceso, que es donde va el pie, no hay desplazamiento a 1366×768 ni a 390×844.
+

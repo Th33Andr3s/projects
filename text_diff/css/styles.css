@@ -1,0 +1,651 @@
+/* Estilo sobrio: fondo oscuro neutro con un solo acento azul. El verde y el rojo solo marcan lo agregado y lo quitado (y siempre con su signo y su texto); el foco es ámbar para no confundirse con ninguno. */
+:root {
+  --color_background: #0f1720;
+  --color_background_glow: #12305a;
+  --color_card: #17212c;
+  --color_card_edge: #263443;
+  /* Borde de los controles (campos, listas y botones): más claro que el de la tarjeta para que se distingan bien */
+  --color_control_edge: #6a8094;
+  --color_field: #0f1720;
+  --color_chip: #202d3b;
+  --color_text: #e8eef4;
+  --color_text_muted: #9fb0c0;
+  --color_accent: #60a5fa;
+  --color_accent_strong: #93c5fd;
+  --color_on_accent: #0b1a33;
+  --color_focus: #fbbf24;
+  --color_valid: #4ade80;
+  --color_error: #fda4af;
+  /* Lo agregado (verde) y lo quitado (rojo): fondo de la línea y, más intenso, de las palabras distintas */
+  --color_added_bg: #123524;
+  --color_added_mark: #1f6b3d;
+  --color_added_sign: #86efac;
+  --color_removed_bg: #3b1620;
+  --color_removed_mark: #8a2a3d;
+  --color_removed_sign: #fda4af;
+  --color_empty_cell: #1b2735;
+  --radius: 16px;
+  --font_ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font_code: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+  /* Hace que las listas desplegables y las barras de desplazamiento nativas también salgan oscuras */
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* El atributo hidden siempre gana, aunque otra regla defina display */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font_ui);
+  line-height: 1.5;
+  color: var(--color_text);
+  background:
+    radial-gradient(circle at 20% 10%, var(--color_background_glow), transparent 45%),
+    var(--color_background);
+}
+
+.skip_link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+  text-decoration: none;
+}
+
+.skip_link:focus {
+  top: 16px;
+}
+
+/* Texto solo para lectores de pantalla */
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Lienzo 3D de fondo: decorativo, nunca recibe toques */
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  /* La columna nunca pasa del ancho de la pantalla: así, un contenido ancho no estira la página en celular */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: start center;
+  padding: 24px 16px;
+}
+
+.card {
+  width: 100%;
+  max-width: 720px;
+  padding: 24px 20px 20px;
+  background: var(--color_card);
+  border: 1px solid var(--color_card_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.card_header {
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.page_title {
+  font-size: clamp(1.15rem, 5.2vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.page_title .fa-code-compare {
+  margin-right: 6px;
+  color: var(--color_accent);
+}
+
+.page_subtitle {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+.inputs_bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+/* Los dos textos: uno sobre otro en celular, con Intercambiar en medio; lado a lado en pantallas anchas */
+.inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.pane_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  margin-bottom: 6px;
+}
+
+.swap_column {
+  display: flex;
+  justify-content: center;
+}
+
+label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Cuadros de texto: monoespaciados, de 16 px para que iOS no haga zoom, con alto mínimo y máximo */
+.code_box {
+  display: block;
+  width: 100%;
+  min-height: 160px;
+  max-height: 50vh;
+  padding: 12px 14px;
+  font-family: var(--font_code);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color_text);
+  tab-size: 2;
+  /* El alto lo ajusta js/main.js al contenido, hasta el máximo; después el cuadro se desplaza por dentro */
+  resize: none;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+.code_box::placeholder {
+  color: var(--color_text_muted);
+  opacity: 1;
+}
+
+/* Un cuadro de solo lectura se ve con el borde de las tarjetas */
+.code_box[readonly] {
+  border-color: var(--color_card_edge);
+}
+
+/* Estado en vivo: iguales, cuántos cambios hay, o un aviso */
+.status {
+  min-height: 24px;
+  margin-top: 10px;
+  font-size: 0.95rem;
+}
+
+.status p {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.status_same {
+  font-weight: 600;
+  color: var(--color_valid);
+}
+
+.status_changes {
+  font-weight: 600;
+  color: var(--color_text);
+}
+
+.status_changes .fa-code-compare {
+  color: var(--color_accent);
+}
+
+.status_warning {
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+/* Opciones */
+.options_bar {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.options_row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 20px;
+}
+
+/* Casillas: cada opción mide al menos 48 px de alto para tocarla con el dedo */
+.option {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.option input {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--color_accent);
+  cursor: pointer;
+}
+
+/* Vista: dos pestañas del mismo ancho, con el icono junto al nombre */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.tab {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color_text);
+  cursor: pointer;
+  background: var(--color_chip);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab:hover {
+  border-color: var(--color_accent);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+/* Botones */
+.button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:disabled:active {
+  transform: none;
+}
+
+.button_primary {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.button_primary:hover:not(:disabled) {
+  background: var(--color_accent_strong);
+}
+
+.button_secondary {
+  color: var(--color_text);
+  background: transparent;
+  border-color: var(--color_control_edge);
+}
+
+.button_secondary:hover:not(:disabled) {
+  border-color: var(--color_accent);
+}
+
+.button_small {
+  min-height: 44px;
+  padding: 6px 14px;
+}
+
+/* Resultado */
+.result {
+  margin-top: 12px;
+}
+
+/* Anterior, contador y Siguiente: se quedan arriba de la pantalla mientras se recorre la tabla */
+.result_toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-block: 8px;
+  background: var(--color_card);
+}
+
+.change_counter {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.diff_placeholder {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--color_text_muted);
+  background: var(--color_field);
+  border: 1.5px solid var(--color_card_edge);
+  border-radius: 12px;
+}
+
+/* La tabla de diferencias: las líneas largas se parten; en Lado a lado en celular la tabla se desplaza por dentro */
+.diff_scroll {
+  /* Contiene también los textos ocultos para lectores de pantalla, que van en posición absoluta y si no estirarían la página */
+  position: relative;
+  overflow-x: auto;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_card_edge);
+  border-radius: 12px;
+}
+
+.diff_table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-family: var(--font_code);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.diff_table.is_split {
+  min-width: 640px;
+}
+
+.diff_table td {
+  padding: 0 8px;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+/* Con table-layout fixed, el ancho de las columnas lo dan estos col */
+.col_num {
+  width: 3rem;
+}
+
+.col_sign {
+  width: 1.6rem;
+}
+
+.diff_table th {
+  height: 0;
+  padding: 0;
+  border: 0;
+  line-height: 0;
+}
+
+.diff_table .num {
+  padding-inline: 6px;
+  font-size: 0.75rem;
+  line-height: 1.95;
+  text-align: right;
+  color: var(--color_text_muted);
+  user-select: none;
+}
+
+.diff_table .sign {
+  padding-inline: 0;
+  text-align: center;
+  user-select: none;
+}
+
+.cell_removed {
+  background: var(--color_removed_bg);
+}
+
+.cell_removed.sign {
+  color: var(--color_removed_sign);
+}
+
+.cell_added {
+  background: var(--color_added_bg);
+}
+
+.cell_added.sign {
+  color: var(--color_added_sign);
+}
+
+/* Lado a lado: lo que solo existe de un lado deja el otro vacío y rayado */
+.cell_empty {
+  background: repeating-linear-gradient(135deg, var(--color_empty_cell) 0 6px, var(--color_field) 6px 12px);
+}
+
+/* Las palabras distintas dentro de una línea */
+/* Además del fondo más intenso van subrayadas, para que no dependan solo del color */
+.diff_table del,
+.diff_table ins {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.diff_table del {
+  background: var(--color_removed_mark);
+}
+
+.diff_table ins {
+  background: var(--color_added_mark);
+}
+
+/* El cambio al que llevaron Anterior o Siguiente */
+.diff_table tr.is_current td {
+  border-block: 1px solid var(--color_accent);
+}
+
+.diff_table tr.is_current td:first-child {
+  box-shadow: inset 4px 0 0 var(--color_accent);
+}
+
+.diff_table tr:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: -3px;
+}
+
+/* Líneas iguales plegadas */
+.diff_table .fold_cell {
+  padding: 4px 8px;
+  white-space: normal;
+  background: var(--color_chip);
+}
+
+.fold_button {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 12px;
+  font: inherit;
+  font-family: var(--font_ui);
+  font-size: 0.9rem;
+  color: var(--color_text);
+  cursor: pointer;
+  background: transparent;
+  border: 1.5px dashed var(--color_control_edge);
+  border-radius: 8px;
+}
+
+.fold_button:hover {
+  border-color: var(--color_accent);
+}
+
+.table_notice {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+.copy_fallback {
+  margin-top: 12px;
+}
+
+.copy_fallback label {
+  margin-bottom: 6px;
+}
+
+.output_buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.output_buttons .button {
+  flex: 1;
+}
+
+/* Foco siempre visible con teclado */
+.tab:focus-visible,
+.button:focus-visible,
+.fold_button:focus-visible,
+.code_box:focus-visible,
+.diff_scroll:focus-visible,
+.option input:focus-visible,
+.skip_link:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+/* Pantallas anchas: los dos textos lado a lado con Intercambiar en medio */
+@media (min-width: 1100px) {
+  .card {
+    max-width: 1200px;
+  }
+
+  .inputs {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .swap_column {
+    align-items: center;
+  }
+
+  /* En vertical, con el icono sobre el texto, para que la columna del medio sea angosta */
+  .swap_column .button {
+    flex-direction: column;
+    gap: 4px;
+    min-width: 96px;
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+
+  .options_bar {
+    grid-template-columns: minmax(0, 360px) 1fr;
+    align-items: center;
+    gap: 8px 24px;
+  }
+}
+
+/* Pantallas bajas (portátiles, celulares): menos aire */
+@media (max-height: 880px) {
+  .page {
+    padding-block: 12px;
+  }
+
+  .card {
+    padding-block: 16px 14px;
+  }
+
+  .card_header {
+    margin-bottom: 8px;
+  }
+}
+
+/* Pantallas muy angostas: menos relleno lateral y números de línea más estrechos */
+@media (max-width: 380px) {
+  .page {
+    padding-inline: 8px;
+  }
+
+  .card {
+    padding-inline: 12px;
+  }
+
+  .col_num {
+    width: 2.4rem;
+  }
+
+  .result_toolbar .button {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+
+  .change_counter {
+    font-size: 0.85rem;
+  }
+}
+
+/* Movimiento reducido: sin transiciones */
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .button {
+    transition: none;
+  }
+
+  .button:active {
+    transform: none;
+  }
+}
+
+/* Derechos de autor: una línea discreta al pie de la tarjeta */
+.copyright {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--color_text_muted);
+}

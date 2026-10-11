@@ -225,3 +225,8 @@ Además:
 4. Activar "reducir movimiento" en el sistema y comprobar que el fondo queda quieto.
 5. **Comparar con un JSON real tuyo:** pegar una respuesta de una API o un archivo de configuración, formatearlo y compararlo con otra herramienta; el contenido debe ser idéntico salvo los espacios.
 6. Probar con un JSON de más de 1 MB en el celular: debe responder en pocos segundos o avisar que el resultado es demasiado largo para mostrarlo.
+
+### Actualización posterior: favicon y copyright
+
+Se agregó el favicon de la marca (`assets/icons/favicon.ico`, enlazado en el `<head>`) y el pie de copyright con el texto de CLAUDE.md 2.16. El pie suma unos 30 px de alto (el doble de línea en pantallas muy angostas, donde el texto se parte en dos), así que los píxeles de desplazamiento medidos antes en este documento aumentan en esa medida. En 1366×768 y 1920×950 la página sigue cabiendo entera sin desplazarse.
+

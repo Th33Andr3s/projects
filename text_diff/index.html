@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comparador de textos</title>
+    <meta
+      name="description"
+      content="Pega dos textos y mira qué cambió: líneas quitadas, agregadas y las palabras distintas dentro de cada línea. Copia o descarga el resultado como diff. Todo se queda en tu navegador."
+    />
+    <link rel="icon" href="./assets/icons/favicon.ico" sizes="any" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Enlace para saltar directo al contenido con teclado -->
+    <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+    <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+    <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+    <main id="main_content" class="page">
+      <section class="card" aria-labelledby="page_title">
+        <header class="card_header">
+          <h1 id="page_title" class="page_title">
+            <i class="fa-solid fa-code-compare" aria-hidden="true"></i>
+            Comparador de textos
+          </h1>
+          <p class="page_subtitle">
+            Pega dos textos y mira qué cambió. Nada sale de tu navegador.
+          </p>
+        </header>
+
+        <div class="inputs_bar">
+          <button
+            id="clear_button"
+            class="button button_secondary button_small"
+            type="button"
+            disabled
+          >
+            <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Limpiar
+          </button>
+        </div>
+
+        <!-- ===== Entradas: antes y después ===== -->
+        <div class="inputs">
+          <section class="pane" aria-labelledby="before_label">
+            <div class="pane_header">
+              <label id="before_label" for="before_input">Antes</label>
+              <button
+                id="before_file_button"
+                class="button button_secondary button_small"
+                type="button"
+              >
+                <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+                Abrir archivo
+              </button>
+              <input id="before_file" type="file" hidden />
+            </div>
+            <textarea
+              id="before_input"
+              class="code_box"
+              rows="8"
+              spellcheck="false"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              placeholder="Pega aquí el texto de antes"
+            ></textarea>
+          </section>
+
+          <div class="swap_column">
+            <button
+              id="swap_button"
+              class="button button_secondary"
+              type="button"
+            >
+              <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+              Intercambiar
+            </button>
+          </div>
+
+          <section class="pane" aria-labelledby="after_label">
+            <div class="pane_header">
+              <label id="after_label" for="after_input">Después</label>
+              <button
+                id="after_file_button"
+                class="button button_secondary button_small"
+                type="button"
+              >
+                <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+                Abrir archivo
+              </button>
+              <input id="after_file" type="file" hidden />
+            </div>
+            <textarea
+              id="after_input"
+              class="code_box"
+              rows="8"
+              spellcheck="false"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              placeholder="Pega aquí el texto de después"
+            ></textarea>
+          </section>
+        </div>
+
+        <!-- Estado en vivo: iguales, cuántos cambios hay, o un aviso -->
+        <div id="diff_status" class="status" role="status">
+          <p id="status_same" class="status_same" hidden>
+            <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+            <span id="status_same_text"></span>
+          </p>
+          <p id="status_changes" class="status_changes" hidden>
+            <i class="fa-solid fa-code-compare" aria-hidden="true"></i>
+            <span id="status_changes_text"></span>
+          </p>
+          <p id="status_warning" class="status_warning" hidden>
+            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+            <span id="status_warning_text"></span>
+          </p>
+        </div>
+
+        <!-- ===== Opciones ===== -->
+        <div class="options_bar">
+          <!-- Vista. El valor de data-view es el nombre de la vista en js/main.js -->
+          <div class="tabs" role="tablist" aria-label="Vista">
+            <button
+              id="tab_unified"
+              class="tab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="result_panel"
+              data-view="unified"
+            >
+              <i class="fa-solid fa-bars" aria-hidden="true"></i> Unificada
+            </button>
+            <button
+              id="tab_split"
+              class="tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="result_panel"
+              tabindex="-1"
+              data-view="split"
+            >
+              <i class="fa-solid fa-table-columns" aria-hidden="true"></i> Lado
+              a lado
+            </button>
+          </div>
+
+          <div class="options_row">
+            <label class="option" for="only_changes">
+              <input id="only_changes" type="checkbox" />
+              <span>Solo cambios</span>
+            </label>
+            <label class="option" for="ignore_spaces">
+              <input id="ignore_spaces" type="checkbox" />
+              <span>Ignorar espacios</span>
+            </label>
+            <label class="option" for="ignore_case">
+              <input id="ignore_case" type="checkbox" />
+              <span>Ignorar mayúsculas</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- ===== Resultado ===== -->
+        <section
+          id="result_panel"
+          class="result"
+          role="tabpanel"
+          aria-labelledby="tab_unified"
+        >
+          <div class="result_toolbar">
+            <button
+              id="previous_button"
+              class="button button_secondary button_small"
+              type="button"
+              disabled
+            >
+              <i class="fa-solid fa-chevron-up" aria-hidden="true"></i> Anterior
+            </button>
+            <span id="change_counter" class="change_counter">Sin cambios</span>
+            <button
+              id="next_button"
+              class="button button_secondary button_small"
+              type="button"
+              disabled
+            >
+              Siguiente
+              <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <p id="diff_placeholder" class="diff_placeholder">
+            Aquí aparecen las diferencias
+          </p>
+          <div
+            id="diff_scroll"
+            class="diff_scroll"
+            role="region"
+            aria-label="Diferencias"
+            hidden
+          >
+            <table id="diff_table" class="diff_table"></table>
+          </div>
+          <p id="table_notice" class="table_notice" hidden></p>
+
+          <!-- Si el navegador no deja copiar, el diff se muestra aquí, seleccionado -->
+          <div id="copy_fallback" class="copy_fallback" hidden>
+            <label for="copy_fallback_text">Diff para copiar a mano</label>
+            <textarea
+              id="copy_fallback_text"
+              class="code_box"
+              rows="6"
+              readonly
+              spellcheck="false"
+            ></textarea>
+          </div>
+
+          <div class="output_buttons">
+            <button
+              id="copy_button"
+              class="button button_primary"
+              type="button"
+              disabled
+            >
+              <i class="fa-regular fa-copy" aria-hidden="true"></i>
+              <span id="copy_label">Copiar</span>
+            </button>
+            <button
+              id="download_button"
+              class="button button_secondary"
+              type="button"
+              disabled
+            >
+              <i class="fa-solid fa-download" aria-hidden="true"></i> Descargar
+            </button>
+          </div>
+        </section>
+
+        <!-- Avisa a lectores de pantalla cuando se copia, se descarga o se cambia de cambio -->
+        <p id="live_status" class="visually_hidden" role="status"></p>
+
+        <footer class="copyright">
+          <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+        </footer>
+      </section>
+    </main>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,678 @@
+/* Estilo sobrio: fondo oscuro neutro con un solo acento coral. El rojo solo marca lo vencido y la prioridad alta (siempre con texto); el verde, "Nada pendiente"; el foco es cian para no confundirse con el acento. */
+:root {
+  --color_background: #0f1720;
+  --color_background_glow: #4a2410;
+  --color_card: #17212c;
+  --color_card_edge: #263443;
+  /* Borde de los controles (campos, listas y botones): más claro que el de la tarjeta para que se distingan bien */
+  --color_control_edge: #6a8094;
+  --color_field: #0f1720;
+  --color_chip: #202d3b;
+  --color_text: #e8eef4;
+  --color_text_muted: #9fb0c0;
+  --color_accent: #fb923c;
+  --color_accent_strong: #fdba74;
+  --color_on_accent: #2a1200;
+  --color_focus: #4cc9f0;
+  --color_valid: #4ade80;
+  --color_error: #fda4af;
+  --radius: 16px;
+  --font_ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Hace que las listas desplegables, el selector de fecha y las barras de desplazamiento nativas también salgan oscuros */
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* El atributo hidden siempre gana, aunque otra regla defina display */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font_ui);
+  line-height: 1.5;
+  color: var(--color_text);
+  background:
+    radial-gradient(circle at 20% 10%, var(--color_background_glow), transparent 45%),
+    var(--color_background);
+}
+
+.skip_link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 40;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+  text-decoration: none;
+}
+
+.skip_link:focus {
+  top: 16px;
+}
+
+/* Texto solo para lectores de pantalla */
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Lienzo 3D de fondo: decorativo, nunca recibe toques */
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  /* La columna nunca pasa del ancho de la pantalla: así, un contenido ancho no estira la página en celular */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: start center;
+  padding: 24px 16px 96px;
+}
+
+.card {
+  width: 100%;
+  max-width: 640px;
+  padding: 24px 20px 20px;
+  background: var(--color_card);
+  border: 1px solid var(--color_card_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.card_header {
+  margin-bottom: 14px;
+  text-align: center;
+}
+
+.page_title {
+  font-size: clamp(1.15rem, 5.2vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.page_title .fa-list-check {
+  margin-right: 6px;
+  color: var(--color_accent);
+}
+
+.summary {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+.summary.is_clear {
+  font-weight: 600;
+  color: var(--color_valid);
+}
+
+.summary .overdue_count {
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+label,
+legend {
+  display: block;
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Campos */
+input[type="text"],
+input[type="search"],
+input[type="date"],
+select,
+textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font: inherit;
+  /* 16px evita que iOS haga zoom al enfocar el campo */
+  font-size: 1rem;
+  color: var(--color_text);
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color_text_muted);
+  opacity: 1;
+}
+
+select {
+  cursor: pointer;
+}
+
+textarea {
+  display: block;
+  resize: vertical;
+}
+
+.field {
+  margin-bottom: 12px;
+  border: 0;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.filters .field {
+  margin-bottom: 0;
+}
+
+.field_search {
+  flex: 1 1 auto;
+}
+
+.field_filter {
+  flex: 0 0 150px;
+}
+
+/* Agregar */
+.add_row {
+  display: flex;
+  gap: 8px;
+}
+
+.add_row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.warning {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+.link_button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color_accent);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+}
+
+.link_button:hover {
+  color: var(--color_accent_strong);
+}
+
+.link_button .fa-chevron-down {
+  transition: transform 0.2s ease;
+}
+
+.link_button[aria-expanded="true"] .fa-chevron-down {
+  transform: rotate(180deg);
+}
+
+.more_options {
+  padding: 12px 0 0;
+}
+
+.date_row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.date_row input {
+  flex: 1 1 150px;
+  width: auto;
+}
+
+/* Prioridad: tres botones del mismo ancho; por debajo son casillas de opción de las de siempre (con flechas y foco) */
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.segment {
+  position: relative;
+  margin: 0;
+  font-weight: 600;
+}
+
+.segment input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.segment span {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  background: var(--color_chip);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.segment:hover span {
+  border-color: var(--color_accent);
+}
+
+.segment input:checked + span {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.segment input:focus-visible + span {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+/* Botones */
+.button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:disabled:active {
+  transform: none;
+}
+
+.button_primary {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.button_primary:hover:not(:disabled) {
+  background: var(--color_accent_strong);
+}
+
+.button_secondary {
+  color: var(--color_text);
+  background: transparent;
+  border-color: var(--color_control_edge);
+}
+
+.button_secondary:hover:not(:disabled) {
+  border-color: var(--color_accent);
+}
+
+.button_danger {
+  color: var(--color_error);
+}
+
+.button_small {
+  min-height: 44px;
+  padding: 6px 14px;
+}
+
+/* Las tareas, agrupadas */
+.task_groups {
+  margin-top: 8px;
+}
+
+.group {
+  margin-top: 16px;
+}
+
+.group_title {
+  margin-bottom: 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color_accent);
+}
+
+.group_title.is_overdue {
+  color: var(--color_error);
+}
+
+.task_list {
+  list-style: none;
+}
+
+.task {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color_card_edge);
+  transition: opacity 0.25s ease;
+}
+
+.task.is_fading {
+  opacity: 0.25;
+}
+
+/* La casilla: el cuadro mide 28 px y el área para tocar, 44 */
+.check {
+  flex: 0 0 44px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+}
+
+.check input {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--color_accent);
+  cursor: pointer;
+}
+
+.task_body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.task_title {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 6px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  color: var(--color_text);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+}
+
+.task_title:hover {
+  text-decoration: underline;
+}
+
+.task_meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 0 6px;
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+.task_meta .is_overdue,
+.task_meta .is_high {
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+.task_note {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task.is_done .task_title {
+  font-weight: 400;
+  text-decoration: line-through;
+  color: var(--color_text_muted);
+}
+
+.icon_button {
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  font-size: 1rem;
+  color: var(--color_text_muted);
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 12px;
+}
+
+.icon_button:hover {
+  color: var(--color_text);
+  background: var(--color_chip);
+}
+
+.empty_message {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--color_text_muted);
+}
+
+/* Hechas */
+.done_section {
+  margin-top: 16px;
+}
+
+.done_section summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color_text_muted);
+}
+
+.done_section .button {
+  margin-top: 12px;
+}
+
+/* Respaldo */
+.backup_row {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color_card_edge);
+}
+
+.backup_message {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color_text_muted);
+}
+
+.backup_message.is_error {
+  color: var(--color_error);
+}
+
+/* Aviso de deshacer: al pie de la pantalla, sobre todo lo demás */
+.undo_bar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - 32px);
+  max-width: 420px;
+  padding: 8px 8px 8px 16px;
+  background: var(--color_chip);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+}
+
+.undo_bar span {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+/* Diálogos de edición y de confirmación */
+.dialog {
+  width: calc(100% - 32px);
+  max-width: 480px;
+  margin: auto;
+  padding: 20px;
+  color: var(--color_text);
+  background: var(--color_card);
+  border: 1px solid var(--color_control_edge);
+  border-radius: var(--radius);
+}
+
+.dialog::backdrop {
+  background: rgba(5, 10, 15, 0.7);
+}
+
+.dialog_title {
+  margin-bottom: 12px;
+  font-size: 1.15rem;
+}
+
+.dialog_text {
+  margin-bottom: 16px;
+}
+
+.dialog_buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dialog_buttons .button {
+  flex: 1 1 100px;
+}
+
+/* Foco siempre visible con teclado */
+.button:focus-visible,
+.link_button:focus-visible,
+.icon_button:focus-visible,
+.task_title:focus-visible,
+.check input:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.done_section summary:focus-visible,
+.skip_link:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+/* Pantallas bajas (portátiles, celulares): menos aire */
+@media (max-height: 880px) {
+  .page {
+    padding-top: 12px;
+  }
+
+  .card {
+    padding-block: 16px 14px;
+  }
+
+  .card_header {
+    margin-bottom: 8px;
+  }
+}
+
+/* Pantallas muy angostas: menos relleno lateral, y el filtro debajo de la búsqueda */
+@media (max-width: 380px) {
+  .page {
+    padding-inline: 8px;
+  }
+
+  .card {
+    padding-inline: 12px;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  .field_filter {
+    flex-basis: auto;
+  }
+}
+
+/* Movimiento reducido: sin transiciones */
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .segment span,
+  .task,
+  .link_button .fa-chevron-down {
+    transition: none;
+  }
+
+  .button:active {
+    transform: none;
+  }
+}
+
+/* Derechos de autor: una línea discreta al pie de la tarjeta */
+.copyright {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--color_text_muted);
+}

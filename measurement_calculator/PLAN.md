@@ -200,3 +200,8 @@ Además:
 2. En **GitHub Pages**, tras publicar: abrir `https://<usuario>.github.io/projects/measurement_calculator/` y comprobar que carga sin errores, con iconos y fondo, y que Copiar funciona (el portapapeles solo funciona con https).
 3. Activar "reducir movimiento" en el sistema y comprobar que el fondo queda quieto.
 4. Comparar unas cuantas conversiones que uses a diario (por ejemplo, tu receta favorita en tazas y gramos) con lo que ya conoces, y ajustar las densidades de la tabla 4.3 si alguna se aleja de tus ingredientes.
+
+### Actualización posterior: favicon y copyright
+
+Se agregó el favicon de la marca (`assets/icons/favicon.ico`, enlazado en el `<head>`) y el pie de copyright con el texto de CLAUDE.md 2.16. El pie suma unos 30 px de alto (el doble de línea en pantallas muy angostas, donde el texto se parte en dos), así que los píxeles de desplazamiento medidos antes en este documento aumentan en esa medida. En 1366×768 sigue sin necesitar desplazamiento vertical.
+

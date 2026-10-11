@@ -1,0 +1,489 @@
+/* Estilo sobrio: fondo oscuro neutro con un solo acento ámbar. El verde solo marca "JSON válido"; el foco es cian para no confundirse con el acento. */
+:root {
+  --color_background: #0f1720;
+  --color_background_glow: #4a3410;
+  --color_card: #17212c;
+  --color_card_edge: #263443;
+  /* Borde de los controles (campos, listas y botones): más claro que el de la tarjeta para que se distingan bien */
+  --color_control_edge: #6a8094;
+  --color_field: #0f1720;
+  --color_chip: #202d3b;
+  --color_text: #e8eef4;
+  --color_text_muted: #9fb0c0;
+  --color_accent: #fbbf24;
+  --color_accent_strong: #fcd34d;
+  --color_on_accent: #2a1a00;
+  --color_focus: #4cc9f0;
+  --color_valid: #4ade80;
+  --color_error: #fda4af;
+  --radius: 16px;
+  --font_ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font_code: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+  /* Hace que las listas desplegables nativas también salgan oscuras */
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* El atributo hidden siempre gana, aunque otra regla defina display */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: var(--font_ui);
+  line-height: 1.5;
+  color: var(--color_text);
+  background:
+    radial-gradient(circle at 20% 10%, var(--color_background_glow), transparent 45%),
+    var(--color_background);
+}
+
+.skip_link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+  text-decoration: none;
+}
+
+.skip_link:focus {
+  top: 16px;
+}
+
+/* Texto solo para lectores de pantalla */
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Lienzo 3D de fondo: decorativo, nunca recibe toques */
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  /* La columna nunca pasa del ancho de la pantalla: así, un contenido ancho no estira la página en celular */
+  grid-template-columns: minmax(0, 1fr);
+  place-items: start center;
+  padding: 24px 16px;
+}
+
+.card {
+  width: 100%;
+  max-width: 720px;
+  padding: 24px 20px 20px;
+  background: var(--color_card);
+  border: 1px solid var(--color_card_edge);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.card_header {
+  margin-bottom: 18px;
+  text-align: center;
+}
+
+.page_title {
+  font-size: clamp(1.15rem, 5.2vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.page_title .fa-file-code {
+  margin-right: 6px;
+  color: var(--color_accent);
+}
+
+.page_subtitle {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  color: var(--color_text_muted);
+}
+
+/* Entrada, opciones y resultado: en una columna en celular; en pantallas anchas, la entrada a la izquierda y las opciones con el resultado a la derecha */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.pane_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  margin-bottom: 6px;
+}
+
+label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.field label {
+  margin-bottom: 6px;
+}
+
+/* Cuadros de código: monoespaciados, de 16 px para que iOS no haga zoom, con alto mínimo y máximo */
+.code_box {
+  display: block;
+  width: 100%;
+  min-height: 260px;
+  max-height: 60vh;
+  padding: 12px 14px;
+  font-family: var(--font_code);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color_text);
+  tab-size: 2;
+  /* El alto lo ajusta js/main.js al contenido, hasta el máximo; después el cuadro se desplaza por dentro */
+  resize: none;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+.code_box::placeholder {
+  color: var(--color_text_muted);
+  opacity: 1;
+}
+
+/* El resultado no se edita: se ve como un cuadro de lectura, con el borde de las tarjetas */
+.code_box[readonly] {
+  border-color: var(--color_card_edge);
+}
+
+/* Estado en vivo: Listo, o el aviso con su línea */
+.status {
+  min-height: 24px;
+  margin-top: 10px;
+  font-size: 0.95rem;
+}
+
+.status p {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.status_ready {
+  font-weight: 600;
+  color: var(--color_valid);
+}
+
+.status_warning p {
+  font-weight: 600;
+  color: var(--color_error);
+}
+
+.status_warning .button {
+  margin-top: 8px;
+}
+
+/* Opciones */
+.options_bar {
+  display: grid;
+  gap: 12px;
+}
+
+.options_row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 20px;
+}
+
+.field {
+  flex: 1 1 160px;
+}
+
+select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  font: inherit;
+  /* 16px evita que iOS haga zoom al enfocar el campo */
+  font-size: 1rem;
+  color: var(--color_text);
+  cursor: pointer;
+  background: var(--color_field);
+  border: 1.5px solid var(--color_control_edge);
+  border-radius: 12px;
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Casillas: cada opción mide al menos 48 px de alto para tocarla con el dedo */
+.option {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.option input {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--color_accent);
+  cursor: pointer;
+}
+
+/* Modo: dos pestañas del mismo ancho, con el icono junto al nombre */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.tab {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color_text);
+  cursor: pointer;
+  background: var(--color_chip);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab:hover {
+  border-color: var(--color_accent);
+}
+
+/* Una pestaña que no se puede usar con el lenguaje elegido (Minificado con Texto) */
+.tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tab:disabled:hover {
+  border-color: transparent;
+}
+
+.tab[aria-selected="true"] {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+/* Estadísticas del resultado */
+.stats {
+  margin: 10px 0 12px;
+  font-size: 0.85rem;
+  color: var(--color_text_muted);
+}
+
+/* Botones */
+.button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.1s ease;
+}
+
+.button:active {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:disabled:active {
+  transform: none;
+}
+
+.button_primary {
+  color: var(--color_on_accent);
+  background: var(--color_accent);
+}
+
+.button_primary:hover:not(:disabled) {
+  background: var(--color_accent_strong);
+}
+
+.button_secondary {
+  color: var(--color_text);
+  background: transparent;
+  border-color: var(--color_control_edge);
+}
+
+.button_secondary:hover:not(:disabled) {
+  border-color: var(--color_accent);
+}
+
+.button_small {
+  min-height: 44px;
+  padding: 6px 14px;
+}
+
+.output_buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.output_buttons .button {
+  flex: 1;
+}
+
+/* Foco siempre visible con teclado */
+.tab:focus-visible,
+.button:focus-visible,
+select:focus-visible,
+.code_box:focus-visible,
+.option input:focus-visible,
+.skip_link:focus-visible {
+  outline: 3px solid var(--color_focus);
+  outline-offset: 2px;
+}
+
+/* Pantallas anchas: la entrada a la izquierda; las opciones y el resultado a la derecha */
+@media (min-width: 1100px) {
+  .card {
+    max-width: 1200px;
+  }
+
+  .workspace {
+    /* Con SQL la casilla de mayúsculas ocupa una fila más de opciones; los cuadros ceden ese alto para que la página siga cabiendo */
+    --extra_options_height: 0px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "input options"
+      "input output";
+    grid-template-rows: auto 1fr;
+    gap: 16px 24px;
+  }
+
+  /* Lado a lado, los cuadros dejan sitio para el encabezado, las opciones, las estadísticas y los botones, así que la
+     página entera cabe en pantalla y el contenido largo se desplaza dentro del cuadro */
+  .code_box {
+    max-height: max(200px, calc(100vh - 430px - var(--extra_options_height)));
+    max-height: max(200px, calc(100dvh - 430px - var(--extra_options_height)));
+  }
+
+  .workspace:has(#uppercase_option:not([hidden])) {
+    --extra_options_height: 56px;
+  }
+
+  .pane_input {
+    grid-area: input;
+  }
+
+  .options_bar {
+    grid-area: options;
+  }
+
+  .pane_output {
+    grid-area: output;
+  }
+}
+
+/* Pantallas anchas y altas: el relleno de la página y de la tarjeta es mayor (no se aplica la regla de pantallas bajas),
+   así que los cuadros dejan un poco más de sitio */
+@media (min-width: 1100px) and (min-height: 881px) {
+  .code_box {
+    max-height: max(200px, calc(100vh - 470px - var(--extra_options_height)));
+    max-height: max(200px, calc(100dvh - 470px - var(--extra_options_height)));
+  }
+}
+
+/* Pantallas bajas (portátiles, celulares): menos aire y cuadros más bajos para que todo entre sin desplazarse de más */
+@media (max-height: 880px) {
+  .page {
+    padding-block: 12px;
+  }
+
+  .card {
+    padding-block: 16px 14px;
+  }
+
+  .card_header {
+    margin-bottom: 12px;
+  }
+
+  .code_box {
+    min-height: 200px;
+  }
+}
+
+/* Pantallas muy angostas: menos relleno lateral */
+@media (max-width: 380px) {
+  .page {
+    padding-inline: 8px;
+  }
+
+  .card {
+    padding-inline: 12px;
+  }
+}
+
+/* Movimiento reducido: sin transiciones */
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .button {
+    transition: none;
+  }
+
+  .button:active {
+    transform: none;
+  }
+}
+
+/* Derechos de autor: una línea discreta al pie de la tarjeta */
+.copyright {
+  margin-top: 12px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--color_text_muted);
+}

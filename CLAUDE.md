@@ -136,8 +136,11 @@ projects/
 ├── README.md              # Descripción del repositorio
 ├── .gitignore
 ├── .nojekyll              # Evita que GitHub Pages procese el sitio con Jekyll
+├── LICENSE                # Licencia MIT de todo el repositorio
 ├── dev_server.py          # Servidor local de desarrollo: sin caché y con recarga al reiniciar
 ├── index.html             # Portal: lista y enlaza todos los proyectos
+├── assets/
+│   └── favicon.ico        # Favicon de la marca: copia original. Cada proyecto lleva su propia copia (ver 2.16)
 ├── css/
 │   └── styles.css         # Estilos del portal
 ├── js/
@@ -145,10 +148,15 @@ projects/
 │
 ├── book_life/             # Un proyecto
 ├── calendar/              # Otro proyecto
+├── code_formatter/
 ├── financial_calculator/
+├── json_formatter/
 ├── materials_calculator/
 ├── measurement_calculator/
-└── password_generator/
+├── password_generator/
+├── random_generator/
+├── text_diff/
+└── to_do_list/
 ```
 
 ## 2.5 Estructura fija de cada proyecto
@@ -167,13 +175,13 @@ nombre_del_proyecto/
 │   └── config.js          # Solo si el proyecto usa Supabase. Ver 2.9
 └── assets/
     ├── lottie/            # Archivos .json o .lottie
-    ├── icons/             # SVG propios
+    ├── icons/             # favicon.ico de la marca (obligatorio, ver 2.16) y SVG propios
     └── img/               # Imágenes
 ```
 
 Reglas:
 
-- Si un proyecto no necesita una carpeta de `assets/`, se deja vacía o no se crea, pero no se inventa otra.
+- Todo proyecto tiene `assets/icons/favicon.ico`, aunque no use ninguna otra imagen. Si no necesita más carpetas dentro de `assets/`, no se crean, pero no se inventa otra.
 - Si la lógica crece, se puede dividir `main.js` en más archivos dentro de `js/`, siempre en snake_case y siempre importados desde `main.js`.
 - No se crean subcarpetas fuera de las definidas.
 
@@ -182,7 +190,7 @@ Reglas:
 - Cada proyecto es completamente autónomo. Se puede copiar su carpeta a otro lugar y sigue funcionando.
 - **Nada se comparte** entre proyectos: ni CSS, ni JS, ni assets, ni configuración.
 - Un proyecto nunca enlaza, importa ni referencia archivos de otro proyecto ni de la raíz.
-- Si dos proyectos necesitan lo mismo, se duplica. La duplicación es preferible al acoplamiento.
+- Si dos proyectos necesitan lo mismo, se duplica. La duplicación es preferible al acoplamiento. El favicon y el pie de copyright son ejemplos: cada proyecto lleva su propia copia (ver 2.16).
 
 ## 2.7 Reglas de GitHub Pages
 
@@ -261,6 +269,8 @@ Un proyecto no se considera terminado hasta cumplir **todo** esto:
 - [ ] Si usa Supabase: RLS activo, registro cerrado, sin datos sin sesión, exportación a JSON
 - [ ] Código en inglés, comentarios en español, todo en snake_case
 - [ ] Agregado al portal `index.html` de la raíz
+- [ ] Favicon de la marca en `assets/icons/favicon.ico` y enlazado en el `<head>` (2.16)
+- [ ] Pie de copyright al final de la página, con el texto exacto de 2.16
 - [ ] Una persona sin contexto entiende cómo usarlo sin explicación
 
 ## 2.12 Proyectos del repositorio
@@ -269,20 +279,25 @@ Un proyecto no se considera terminado hasta cumplir **todo** esto:
 |---|---|---|
 | `book_life` | Libro de vida | Libro digital privado de una pareja. Ambos escriben páginas directamente desde el celular, con título, fechas y una foto opcionales; todo se guarda en Supabase tras login y se revisa cada uno o dos meses. Se lee con estética de libro físico, estrellas y 3D. Todo el contenido es privado. |
 | `calendar` | Calendario | Agenda personal: calendario de mes con eventos por día (título, hora, color, notas y repetición semanal, mensual o anual), los festivos de Colombia calculados con la ley y una lista de próximos eventos. Se guarda solo en el navegador (`localStorage`), con Exportar e Importar en JSON como respaldo. Fondo 3D sutil. |
+| `code_formatter` | Formateador de código | Pega CSS, HTML o SQL y lo deja ordenado: lo formatea con sangría o lo minifica, avisa de una llave, una etiqueta o un paréntesis sin cerrar con su línea, y deja copiar o descargar el resultado. Detecta el lenguaje solo; para cualquier otro texto solo limpia espacios sobrantes. Usa un tokenizador propio por lenguaje que no cambia nada del contenido (cadenas, comentarios, atributos y lo que va dentro de `pre`, `script` y `style` salen intactos), salvo las palabras clave de SQL, que pasan a mayúscula si se pide. Nada sale del navegador; recuerda las opciones y el último texto corto. Fondo 3D sutil. |
 | `financial_calculator` | Calculadora financiera | Cuota de un préstamo con tabla de amortización, interés simple y compuesto, ahorro con aportes mensuales y conversión de tasas, con tasas efectivas anuales y valores en pesos colombianos. Recuerda los últimos valores. Fondo 3D sutil. |
 | `json_formatter` | Formateador de JSON | Pega un JSON y lo deja legible: lo formatea con sangría o lo minifica, ordena las claves si se pide, avisa del error con su línea y columna, y deja copiar o descargar el resultado. Usa un analizador propio que no cambia nada del contenido (números grandes, orden de claves y escapes se conservan). Nada sale del navegador; recuerda las opciones y el último texto corto. Fondo 3D sutil. |
 | `materials_calculator` | Calculadora de materiales | Cuánto material comprar para obras pequeñas, con las presentaciones de Colombia: ladrillos y mortero de un muro, cemento, arena y grava del concreto, pañete y pintura, y baldosa, pegante y boquilla de un piso. Redondea hacia arriba a lo que se compra, permite ajustar el desperdicio y copiar la lista de compras. Recuerda los últimos valores. Fondo 3D sutil. |
 | `measurement_calculator` | Calculadora de medidas | Convierte al instante entre unidades de longitud, masa, volumen, temperatura, área, tiempo, cocina (con pesos por ingrediente), velocidad, datos, energía y presión. Recuerda la última conversión. Fondo 3D sutil. |
 | `password_generator` | Generador de contraseñas | Genera contraseñas seguras al azar con longitud y tipos de caracteres a elegir, y las copia con un toque. No guarda ninguna contraseña; solo recuerda las opciones. Fondo 3D sutil. |
+| `random_generator` | Generador aleatorio | Deja el azar decidir de forma justa: saca números en un rango (con o sin repetir, ordenados), elige a alguien de una lista (también quitando a quien sale), la mezcla o la reparte en equipos, y tira dados de 4 a 100 caras o monedas (Cara y Sello). Usa el azar del sistema (`crypto.getRandomValues`) con muestreo por rechazo, sin sesgo, y nunca `Math.random` para decidir. Resultado grande, animación breve de tirada, historial de las últimas 50 tiradas y Copiar. Nada sale del navegador; recuerda las opciones, la lista y el historial. Fondo 3D sutil con dados. |
+| `text_diff` | Comparador de textos | Pega dos textos (o abre dos archivos) y ve qué cambió: líneas quitadas y agregadas con el algoritmo de Myers, y las palabras distintas dentro de cada línea modificada. Vista unificada o lado a lado, solo cambios (con las líneas iguales plegadas), ignorar espacios y mayúsculas, saltar de cambio en cambio, y copiar o descargar el resultado en formato `diff` unificado. Lo que se muestra es siempre el texto tal cual. Nada sale del navegador; recuerda las opciones y los dos últimos textos cortos. Fondo 3D sutil. |
+| `to_do_list` | Lista de tareas | Lista de tareas personal: título, fecha límite, prioridad y nota opcionales; las pendientes se agrupan solas por cuándo tocan (vencidas, hoy, mañana, esta semana, más adelante, sin fecha) y las hechas quedan plegadas al final. Edición en un diálogo, borrado con Deshacer, búsqueda sin tildes ni mayúsculas, filtro Pendientes/Hechas/Todas, y Exportar e Importar en JSON como respaldo. Las fechas son claves `AAAA-MM-DD` sin zona horaria. Se guarda solo en el navegador (`localStorage`). Fondo 3D sutil. |
 
 ## 2.13 Cómo agregar un proyecto nuevo
 
 1. Crear la carpeta en la raíz con nombre en snake_case.
 2. Crear la estructura completa de 2.5.
 3. Escribir el `README.md` según 1.6.
-4. Agregar la fila en la tabla 2.12 de este archivo.
-5. Agregar la tarjeta correspondiente en el portal `index.html` de la raíz.
-6. Verificar el checklist 2.11 antes de darlo por terminado.
+4. Copiar el favicon de la marca a `assets/icons/favicon.ico`, enlazarlo en el `<head>` y agregar el pie de copyright (2.16).
+5. Agregar la fila en la tabla 2.12 de este archivo.
+6. Agregar la tarjeta correspondiente en el portal `index.html` de la raíz.
+7. Verificar el checklist 2.11 antes de darlo por terminado.
 
 ## 2.14 Plantilla base de `index.html`
 
@@ -296,6 +311,7 @@ Todo proyecto parte de esta plantilla. Se eliminan las líneas de librerías que
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nombre del proyecto</title>
   <meta name="description" content="Descripción breve del proyecto">
+  <link rel="icon" href="./assets/icons/favicon.ico" sizes="any">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
   <link rel="stylesheet" href="./css/styles.css">
   <script type="importmap">
@@ -311,6 +327,11 @@ Todo proyecto parte de esta plantilla. Se eliminan las líneas de librerías que
   <!-- Contenido principal. Siempre con un <main> para lectores de pantalla -->
   <main id="main_content">
     <h1>Nombre del proyecto</h1>
+
+    <!-- Al final del contenido de la página, dentro de la tarjeta si la hay -->
+    <footer class="copyright">
+      <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+    </footer>
   </main>
 
   <script src="https://unpkg.com/@lottiefiles/lottie-player@2.0.12/dist/lottie-player.js"></script>
@@ -334,3 +355,29 @@ Desde esta carpeta:
 
 Abrir http://localhost:8080 en el navegador.
 ```
+
+## 2.16 Marca, favicon y derechos de autor
+
+### Favicon
+
+- El favicon es la marca personal y es el mismo en todos los proyectos. El archivo original está en `assets/favicon.ico`, en la raíz del repositorio.
+- Por el aislamiento de 2.6, **cada proyecto lleva su propia copia** en `assets/icons/favicon.ico` y la enlaza con `<link rel="icon" href="./assets/icons/favicon.ico" sizes="any">` en el `<head>`, justo después de la descripción. Nunca se enlaza `../assets/favicon.ico`.
+- El portal de la raíz usa directamente `./assets/favicon.ico`.
+- Si el favicon cambia, se reemplaza el original y se copia a `assets/icons/favicon.ico` de **todos** los proyectos a la vez, como pasa con las versiones de 2.3.
+
+### Derechos de autor
+
+- Toda página lleva, al final de su contenido, una línea con este texto exacto, con el símbolo ©, el año de la primera publicación (2026) y el nombre de la marca:
+
+  `© 2026 Andres Felipe Olaya - Dev Layer`
+
+- Va dentro de un `<footer class="copyright">` con un `<p>`, al pie de la tarjeta (o de la pantalla de acceso, en `book_life`, donde el resto de las pantallas exigen sesión). Estilo: `.copyright` en el `styles.css` de cada proyecto, texto pequeño (0,8 rem), centrado y con el color de texto atenuado de ese proyecto, de modo que cumpla el contraste de 1.5.
+- El año de los proyectos es el de la primera publicación y no se actualiza cada enero. El portal de la raíz, en cambio, muestra el año actual (lo escribe `js/main.js`), porque su pie ya lo hacía.
+- La línea es una señal de autoría; no reemplaza a la licencia.
+
+### Licencia
+
+- Todo el repositorio se publica bajo la licencia MIT, en el archivo `LICENSE` de la raíz, a nombre de `Andres Felipe Olaya - Dev Layer`. Los proyectos no llevan su propio archivo de licencia.
+- La MIT permite que cualquiera use, copie, modifique y publique el código, con una condición: **debe conservar el aviso de copyright y el texto de la licencia** en las copias. Esa es la referencia a la autoría que se exige; no obliga a mencionarla en la interfaz de quien lo reutilice.
+- Las librerías cargadas por CDN (2.3) mantienen sus propias licencias: no se copian al repositorio.
+

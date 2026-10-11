@@ -1,220 +1,270 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Calendario</title>
-  <meta name="description" content="Agenda personal: un calendario de mes con eventos por día, repeticiones y los festivos de Colombia. Se guarda en tu equipo.">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-  <link rel="stylesheet" href="./css/styles.css">
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-    }
-  }
-  </script>
-</head>
-<body>
-  <!-- Enlace para saltar directo al contenido con teclado -->
-  <a class="skip_link" href="#main_content">Ir al contenido</a>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calendario</title>
+    <meta name="description"
+        content="Agenda personal: un calendario de mes con eventos por día, repeticiones y los festivos de Colombia. Se guarda en tu equipo." />
+    <link rel="icon" href="./assets/icons/favicon.ico" sizes="any" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <script type="importmap">
+          {
+            "imports": {
+              "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+              "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+            }
+          }
+        </script>
+    </head>
+    
+    <body>
+        <!-- Enlace para saltar directo al contenido con teclado -->
+        <a class="skip_link" href="#main_content">Ir al contenido</a>
 
-  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
-  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+    <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+    <canvas id="scene_canvas" aria-hidden="true"></canvas>
 
-  <main id="main_content" class="page">
-    <section class="card" aria-labelledby="page_title">
-      <header class="card_header">
-        <h1 id="page_title" class="page_title">
-          <i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Calendario
-        </h1>
-        <p class="page_subtitle">Tus eventos por día, con los festivos de Colombia.</p>
-      </header>
+    <main id="main_content" class="page">
+        <section class="card" aria-labelledby="page_title">
+            <header class="card_header">
+                <h1 id="page_title" class="page_title">
+            <i class="fa-solid fa-calendar-days" aria-hidden="true"></i>
+            Calendario
+            </h1>
+        <p class="page_subtitle">
+            Tus eventos por día, con los festivos de Colombia.
+        </p>
+        </header>
 
-      <!-- Aviso que solo se muestra si el navegador no deja guardar -->
-      <p id="storage_warning" class="notice" role="status" hidden>
-        Tu navegador no permite guardar. Los eventos se perderán al cerrar la página.
-      </p>
+        <!-- Aviso que solo se muestra si el navegador no deja guardar -->
+        <p id="storage_warning" class="notice" role="status" hidden>
+        Tu navegador no permite guardar. Los eventos se perderán al cerrar la
+        página.
+        </p>
 
-      <!-- Vista. El valor de data-view es el nombre de la pestaña en js/main.js -->
-      <div class="tabs" role="tablist" aria-label="Vista">
-        <button id="tab_month" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel_month" data-view="month">
-          <i class="fa-regular fa-calendar" aria-hidden="true"></i> Mes
+        <!-- Vista. El valor de data-view es el nombre de la pestaña en js/main.js -->
+        <div class="tabs" role="tablist" aria-label="Vista">
+        <button id="tab_month" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel_month"
+            data-view="month">
+            <i class="fa-regular fa-calendar" aria-hidden="true"></i> Mes
         </button>
-        <button id="tab_upcoming" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_upcoming" tabindex="-1" data-view="upcoming">
-          <i class="fa-solid fa-list-ul" aria-hidden="true"></i> Próximos
+        <button id="tab_upcoming" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel_upcoming"
+            tabindex="-1" data-view="upcoming">
+            <i class="fa-solid fa-list-ul" aria-hidden="true"></i> Próximos
         </button>
-      </div>
+        </div>
 
-      <!-- ===== Mes ===== -->
-      <div id="panel_month" class="panel" role="tabpanel" aria-labelledby="tab_month">
-        <div class="month_layout">
-          <div class="calendar_block">
-            <div class="month_header">
-              <button id="month_prev" class="icon_button" type="button" aria-label="Mes anterior">
-                <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
-              </button>
-              <h2 id="month_title" class="month_title" aria-live="polite">Octubre de 2026</h2>
-              <button id="month_next" class="icon_button" type="button" aria-label="Mes siguiente">
-                <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
-              </button>
-              <button id="month_today" class="button button_secondary button_small" type="button">Hoy</button>
-            </div>
+        <!-- ===== Mes ===== -->
+        <div id="panel_month" class="panel" role="tabpanel" aria-labelledby="tab_month">
+            <div class="month_layout">
+                <div class="calendar_block">
+                    <div class="month_header">
+                <button id="month_prev" class="icon_button" type="button" aria-label="Mes anterior">
+                    <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+                </button>
+                <h2 id="month_title" class="month_title" aria-live="polite">
+                    Octubre de 2026
+                </h2>
+                <button id="month_next" class="icon_button" type="button" aria-label="Mes siguiente">
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </button>
+                <button id="month_today" class="button button_secondary button_small" type="button">
+                    Hoy
+                </button>
+                </div>
 
             <table id="month_grid" class="month_grid" role="grid" aria-labelledby="month_title">
-              <thead>
-                <tr></tr>
-              </thead>
-              <tbody></tbody>
+                <thead>
+                    <tr></tr>
+                </thead>
+                <tbody></tbody>
             </table>
 
             <p class="legend">
-              <span class="legend_item"><span class="holiday_mark" aria-hidden="true"></span> Festivo</span>
-              <span class="legend_item"><span class="mark color_green" aria-hidden="true"></span> Evento</span>
-            </p>
-          </div>
+                <span class="legend_item"><span class="holiday_mark" aria-hidden="true"></span>
+                    Festivo</span>
+                <span class="legend_item"><span class="mark color_green" aria-hidden="true"></span>
+                    Evento</span>
+                </p>
+                </div>
 
-          <!-- Detalle del día elegido -->
-          <section class="day_detail" aria-labelledby="day_title">
-            <h3 id="day_title" class="day_title"></h3>
-            <p id="day_holiday" class="day_holiday" hidden><i class="fa-regular fa-flag" aria-hidden="true"></i> <span id="day_holiday_name"></span></p>
+            <!-- Detalle del día elegido -->
+            <section class="day_detail" aria-labelledby="day_title">
+                <h3 id="day_title" class="day_title"></h3>
+            <p id="day_holiday" class="day_holiday" hidden>
+                <i class="fa-regular fa-flag" aria-hidden="true"></i>
+                <span id="day_holiday_name"></span>
+            </p>
 
             <ul id="day_events" class="event_list" hidden></ul>
             <p id="day_empty" class="day_empty">No hay eventos este día.</p>
 
             <button id="add_event_button" class="button button_primary" type="button">
-              <i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar evento
+                <i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar
+                evento
             </button>
-          </section>
-        </div>
-      </div>
+            </section>
+            </div>
+            </div>
 
-      <!-- ===== Próximos ===== -->
-      <div id="panel_upcoming" class="panel" role="tabpanel" aria-labelledby="tab_upcoming" hidden>
-        <p class="panel_intro">Lo que viene en los próximos 90 días.</p>
-        <div id="upcoming_list" class="upcoming_list"></div>
+        <!-- ===== Próximos ===== -->
+        <div id="panel_upcoming" class="panel" role="tabpanel" aria-labelledby="tab_upcoming" hidden>
+            <p class="panel_intro">Lo que viene en los próximos 90 días.</p>
+            <div id="upcoming_list" class="upcoming_list"></div>
 
         <!-- Solo se muestra cuando no hay nada en los próximos 90 días -->
         <div id="upcoming_empty" class="upcoming_empty" hidden>
-          <p>No tienes eventos en los próximos 90 días.</p>
-          <button id="upcoming_add_button" class="button button_primary" type="button">
-            <i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar evento
-          </button>
-        </div>
-      </div>
+            <p>No tienes eventos en los próximos 90 días.</p>
+            <button id="upcoming_add_button" class="button button_primary" type="button">
+                <i class="fa-solid fa-plus" aria-hidden="true"></i> Agregar evento
+            </button>
+            </div>
+            </div>
 
-      <!-- Respaldo: los eventos viven solo en este navegador -->
-      <footer class="backup">
-        <p class="backup_text">Tus eventos se guardan solo en este navegador. Descarga un respaldo para no perderlos.</p>
+        <!-- Respaldo: los eventos viven solo en este navegador -->
+        <footer class="backup">
+        <p class="backup_text">
+            Tus eventos se guardan solo en este navegador. Descarga un respaldo
+            para no perderlos.
+        </p>
         <div class="backup_buttons">
-          <button id="export_button" class="button button_secondary" type="button">
-            <i class="fa-solid fa-download" aria-hidden="true"></i> Exportar
-          </button>
-          <button id="import_button" class="button button_secondary" type="button">
-            <i class="fa-solid fa-upload" aria-hidden="true"></i> Importar
-          </button>
-        </div>
-        <input id="import_file" class="visually_hidden" type="file" accept=".json,application/json" tabindex="-1" aria-label="Archivo de respaldo">
+            <button id="export_button" class="button button_secondary" type="button">
+                <i class="fa-solid fa-download" aria-hidden="true"></i> Exportar
+            </button>
+            <button id="import_button" class="button button_secondary" type="button">
+                <i class="fa-solid fa-upload" aria-hidden="true"></i> Importar
+            </button>
+            </div>
+        <input id="import_file" class="visually_hidden" type="file" accept=".json,application/json" tabindex="-1"
+            aria-label="Archivo de respaldo" />
         <!-- Resumen de lo que trae el archivo, antes de confirmar la importación -->
         <div id="import_summary" class="import_summary" hidden>
-          <p id="import_summary_text"></p>
-          <div class="backup_buttons">
-            <button id="import_confirm" class="button button_primary" type="button" aria-describedby="import_summary_text">Importar</button>
-            <button id="import_cancel" class="button button_secondary" type="button" aria-describedby="import_summary_text">Cancelar</button>
-          </div>
-        </div>
-      </footer>
+            <p id="import_summary_text"></p>
+            <div class="backup_buttons">
+            <button id="import_confirm" class="button button_primary" type="button" aria-describedby="import_summary_text">
+                Importar
+            </button>
+            <button id="import_cancel" class="button button_secondary" type="button" aria-describedby="import_summary_text">
+                Cancelar
+            </button>
+            </div>
+            </div>
+            </footer>
 
-      <!-- Avisa a lectores de pantalla cuando se guarda o se borra algo -->
-      <p id="live_status" class="visually_hidden" role="status"></p>
+        <!-- Avisa a lectores de pantalla cuando se guarda o se borra algo -->
+        <p id="live_status" class="visually_hidden" role="status"></p>
+<footer class="copyright">
+    <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+</footer>
     </section>
-  </main>
+    </main>
 
-  <script type="module" src="./js/main.js"></script>
+    <script type="module" src="./js/main.js"></script>
 
-  <!-- Diálogo para agregar o editar un evento -->
-  <dialog id="event_dialog" class="dialog" aria-labelledby="dialog_title">
-    <form id="event_form" class="event_form" method="dialog" novalidate>
-      <h2 id="dialog_title" class="dialog_title">Agregar evento</h2>
+    <!-- Diálogo para agregar o editar un evento -->
+    <dialog id="event_dialog" class="dialog" aria-labelledby="dialog_title">
+        <form id="event_form" class="event_form" method="dialog" novalidate>
+            <h2 id="dialog_title" class="dialog_title">Agregar evento</h2>
 
-      <div class="field">
-        <label for="event_title">Título</label>
-        <input id="event_title" class="text_control" type="text" maxlength="80" autocomplete="off" aria-describedby="event_title_error" required>
+        <div class="field">
+            <label for="event_title">Título</label>
+        <input id="event_title" class="text_control" type="text" maxlength="80" autocomplete="off"
+            aria-describedby="event_title_error" required />
         <p id="event_title_error" class="field_error" hidden></p>
-      </div>
+        </div>
 
-      <div class="field">
-        <label for="event_date">Fecha</label>
-        <input id="event_date" class="text_control" type="date" aria-describedby="event_date_error" required>
+        <div class="field">
+            <label for="event_date">Fecha</label>
+        <input id="event_date" class="text_control" type="date" aria-describedby="event_date_error" required />
         <p id="event_date_error" class="field_error" hidden></p>
-      </div>
+        </div>
 
-      <label class="option" for="event_all_day">
-        <input id="event_all_day" type="checkbox" checked>
+        <label class="option" for="event_all_day">
+        <input id="event_all_day" type="checkbox" checked />
         <span>Todo el día</span>
-      </label>
+        </label>
 
-      <!-- Solo se ven al desmarcar "Todo el día" -->
-      <div id="event_times" class="field_row" hidden>
-        <div class="field">
-          <label for="event_start">Inicio</label>
-          <input id="event_start" class="text_control" type="time" aria-describedby="event_times_error">
-        </div>
-        <div class="field">
-          <label for="event_end">Fin</label>
-          <input id="event_end" class="text_control" type="time" aria-describedby="event_times_error">
-        </div>
+        <!-- Solo se ven al desmarcar "Todo el día" -->
+        <div id="event_times" class="field_row" hidden>
+            <div class="field">
+                <label for="event_start">Inicio</label>
+            <input id="event_start" class="text_control" type="time" aria-describedby="event_times_error" />
+            </div>
+            <div class="field">
+                <label for="event_end">Fin</label>
+            <input id="event_end" class="text_control" type="time" aria-describedby="event_times_error" />
+            </div>
         <p id="event_times_error" class="field_error field_error_wide" hidden></p>
-      </div>
-
-      <fieldset class="color_picker">
-        <legend>Color</legend>
-        <div class="color_options">
-          <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="red"><span class="color_swatch color_red"></span><span class="visually_hidden">Rojo</span></label>
-          <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="orange"><span class="color_swatch color_orange"></span><span class="visually_hidden">Naranja</span></label>
-          <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="green" checked><span class="color_swatch color_green"></span><span class="visually_hidden">Verde</span></label>
-          <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="teal"><span class="color_swatch color_teal"></span><span class="visually_hidden">Turquesa</span></label>
-          <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="purple"><span class="color_swatch color_purple"></span><span class="visually_hidden">Morado</span></label>
-          <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="pink"><span class="color_swatch color_pink"></span><span class="visually_hidden">Rosa</span></label>
         </div>
-      </fieldset>
 
-      <div class="field">
-        <label for="event_repeat">Repetir</label>
-        <select id="event_repeat">
-          <option value="none" selected>No se repite</option>
-          <option value="weekly">Cada semana</option>
-          <option value="monthly">Cada mes</option>
-          <option value="yearly">Cada año</option>
-        </select>
-        <!-- Solo se ve si el evento se repite -->
-        <p id="event_repeat_hint" class="field_hint" hidden>La fecha es la del primer día. Los cambios valen para todas las repeticiones.</p>
-      </div>
+        <fieldset class="color_picker">
+            <legend>Color</legend>
+            <div class="color_options">
+            <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="red" /><span
+                    class="color_swatch color_red"></span><span class="visually_hidden">Rojo</span></label>
+            <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="orange" /><span
+                    class="color_swatch color_orange"></span><span class="visually_hidden">Naranja</span></label>
+            <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="green" checked /><span
+                    class="color_swatch color_green"></span><span class="visually_hidden">Verde</span></label>
+            <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="teal" /><span
+                    class="color_swatch color_teal"></span><span class="visually_hidden">Turquesa</span></label>
+            <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="purple" /><span
+                    class="color_swatch color_purple"></span><span class="visually_hidden">Morado</span></label>
+            <label class="color_option"><input class="visually_hidden" type="radio" name="event_color" value="pink" /><span
+                    class="color_swatch color_pink"></span><span class="visually_hidden">Rosa</span></label>
+            </div>
+            </fieldset>
 
-      <div class="field">
-        <label for="event_notes">Notas (opcional)</label>
+        <div class="field">
+            <label for="event_repeat">Repetir</label>
+            <select id="event_repeat">
+                <option value="none" selected>No se repite</option>
+                <option value="weekly">Cada semana</option>
+                <option value="monthly">Cada mes</option>
+                <option value="yearly">Cada año</option>
+            </select>
+            <!-- Solo se ve si el evento se repite -->
+        <p id="event_repeat_hint" class="field_hint" hidden>
+            La fecha es la del primer día. Los cambios valen para todas las
+            repeticiones.
+        </p>
+        </div>
+
+        <div class="field">
+            <label for="event_notes">Notas (opcional)</label>
         <textarea id="event_notes" class="text_control" rows="3" maxlength="500"></textarea>
-      </div>
+        </div>
 
-      <div class="dialog_buttons">
-        <button id="save_button" class="button button_primary" type="submit">Guardar</button>
-        <button id="cancel_button" class="button button_secondary" type="button">Cancelar</button>
+        <div class="dialog_buttons">
+        <button id="save_button" class="button button_primary" type="submit">
+            Guardar
+        </button>
+        <button id="cancel_button" class="button button_secondary" type="button">
+            Cancelar
+        </button>
         <!-- Solo al editar un evento que ya existe -->
         <button id="delete_button" class="button button_danger" type="button" hidden>
-          <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Borrar
+            <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Borrar
         </button>
-      </div>
-
-      <!-- Confirmación de borrado, dentro del mismo diálogo -->
-      <div id="delete_confirm" class="delete_confirm" role="alert" hidden>
-        <p>¿Borrar este evento? Si se repite, se borran todas sus repeticiones.</p>
-        <div class="dialog_buttons">
-          <button id="delete_yes" class="button button_danger" type="button">Sí, borrar</button>
-          <button id="delete_no" class="button button_secondary" type="button">No</button>
         </div>
-      </div>
-    </form>
-  </dialog>
-</body>
+
+        <!-- Confirmación de borrado, dentro del mismo diálogo -->
+        <div id="delete_confirm" class="delete_confirm" role="alert" hidden>
+        <p>
+            ¿Borrar este evento? Si se repite, se borran todas sus repeticiones.
+        </p>
+        <div class="dialog_buttons">
+            <button id="delete_yes" class="button button_danger" type="button">
+                Sí, borrar
+            </button>
+            <button id="delete_no" class="button button_secondary" type="button">
+                No
+            </button>
+            </div>
+            </div>
+            </form>
+            </dialog>
+            </body>
 </html>

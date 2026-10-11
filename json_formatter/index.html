@@ -1,119 +1,138 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Formateador de JSON</title>
-  <meta name="description" content="Pega un JSON y déjalo legible: formatéalo con sangría o minifícalo, mira en qué línea y columna está el error, y copia o descarga el resultado. Todo se queda en tu navegador.">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-  <link rel="stylesheet" href="./css/styles.css">
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-    }
-  }
-  </script>
-</head>
-<body>
-  <!-- Enlace para saltar directo al contenido con teclado -->
-  <a class="skip_link" href="#main_content">Ir al contenido</a>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Formateador de JSON</title>
+    <meta name="description"
+        content="Pega un JSON y déjalo legible: formatéalo con sangría o minifícalo, mira en qué línea y columna está el error, y copia o descarga el resultado. Todo se queda en tu navegador." />
+    <link rel="icon" href="./assets/icons/favicon.ico" sizes="any" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <script type="importmap">
+          {
+            "imports": {
+              "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+              "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+            }
+          }
+        </script>
+    </head>
+    
+    <body>
+        <!-- Enlace para saltar directo al contenido con teclado -->
+        <a class="skip_link" href="#main_content">Ir al contenido</a>
 
-  <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
-  <canvas id="scene_canvas" aria-hidden="true"></canvas>
+    <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+    <canvas id="scene_canvas" aria-hidden="true"></canvas>
 
-  <main id="main_content" class="page">
-    <section class="card" aria-labelledby="page_title">
-      <header class="card_header">
-        <h1 id="page_title" class="page_title">
-          <i class="fa-solid fa-code" aria-hidden="true"></i> Formateador de JSON
-        </h1>
-        <p class="page_subtitle">Pega tu JSON y déjalo legible. Nada sale de tu navegador.</p>
-      </header>
+    <main id="main_content" class="page">
+        <section class="card" aria-labelledby="page_title">
+            <header class="card_header">
+                <h1 id="page_title" class="page_title">
+            <i class="fa-solid fa-code" aria-hidden="true"></i> Formateador de
+            JSON
+            </h1>
+        <p class="page_subtitle">
+            Pega tu JSON y déjalo legible. Nada sale de tu navegador.
+        </p>
+        </header>
 
-      <div class="workspace">
-        <!-- ===== Entrada ===== -->
-        <section class="pane pane_input" aria-labelledby="input_label">
-          <div class="pane_header">
-            <label id="input_label" for="json_input">Entrada</label>
+        <div class="workspace">
+            <!-- ===== Entrada ===== -->
+            <section class="pane pane_input" aria-labelledby="input_label">
+                <div class="pane_header">
+                    <label id="input_label" for="json_input">Entrada</label>
             <button id="clear_button" class="button button_secondary button_small" type="button" disabled>
-              <i class="fa-regular fa-trash-can" aria-hidden="true"></i> Limpiar
+                <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+                Limpiar
             </button>
-          </div>
-          <textarea id="json_input" class="code_box" rows="10" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Pega aquí tu JSON" aria-describedby="json_status"></textarea>
+            </div>
+            <textarea id="json_input" class="code_box" rows="10" spellcheck="false" autocomplete="off" autocapitalize="off"
+                autocorrect="off" placeholder="Pega aquí tu JSON" aria-describedby="json_status"></textarea>
 
-          <!-- Estado en vivo: válido (con un resumen) o el error con su línea y columna -->
-          <div id="json_status" class="status" role="status">
-            <p id="status_valid" class="status_valid" hidden>
-              <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
-              <span id="status_valid_text"></span>
-            </p>
-            <div id="status_error" class="status_error" hidden>
-              <p>
+            <!-- Estado en vivo: válido (con un resumen) o el error con su línea y columna -->
+            <div id="json_status" class="status" role="status">
+                <p id="status_valid" class="status_valid" hidden>
+                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                    <span id="status_valid_text"></span>
+                </p>
+                <div id="status_error" class="status_error" hidden>
+                    <p>
                 <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
                 <span id="status_error_text"></span>
-              </p>
-              <button id="go_to_error_button" class="button button_secondary button_small" type="button">
-                <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> Ir al error
-              </button>
-            </div>
-          </div>
-        </section>
+                </p>
+                <button id="go_to_error_button" class="button button_secondary button_small" type="button">
+                    <i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i>
+                    Ir al error
+                </button>
+                </div>
+                </div>
+                </section>
 
         <!-- ===== Opciones ===== -->
         <div class="options_bar">
-          <!-- Modo. El valor de data-mode es el nombre del modo en js/main.js -->
-          <div class="tabs" role="tablist" aria-label="Modo">
-            <button id="tab_format" class="tab" type="button" role="tab" aria-selected="true" aria-controls="output_panel" data-mode="format">
-              <i class="fa-solid fa-align-left" aria-hidden="true"></i> Formateado
+            <!-- Modo. El valor de data-mode es el nombre del modo en js/main.js -->
+            <div class="tabs" role="tablist" aria-label="Modo">
+            <button id="tab_format" class="tab" type="button" role="tab" aria-selected="true" aria-controls="output_panel"
+                data-mode="format">
+                <i class="fa-solid fa-align-left" aria-hidden="true"></i>
+                Formateado
             </button>
-            <button id="tab_minify" class="tab" type="button" role="tab" aria-selected="false" aria-controls="output_panel" tabindex="-1" data-mode="minify">
-              <i class="fa-solid fa-compress" aria-hidden="true"></i> Minificado
+            <button id="tab_minify" class="tab" type="button" role="tab" aria-selected="false" aria-controls="output_panel"
+                tabindex="-1" data-mode="minify">
+                <i class="fa-solid fa-compress" aria-hidden="true"></i>
+                Minificado
             </button>
-          </div>
-
-          <div class="options_row">
-            <div class="field">
-              <label for="indent_select">Sangría</label>
-              <select id="indent_select">
-                <option value="2" selected>2 espacios</option>
-                <option value="4">4 espacios</option>
-                <option value="tab">Tabulación</option>
-              </select>
             </div>
-            <label class="option" for="sort_keys">
-              <input id="sort_keys" type="checkbox">
-              <span>Ordenar claves</span>
-            </label>
-          </div>
-        </div>
+
+            <div class="options_row">
+                <div class="field">
+                    <label for="indent_select">Sangría</label>
+                    <select id="indent_select">
+                        <option value="2" selected>2 espacios</option>
+                        <option value="4">4 espacios</option>
+                        <option value="tab">Tabulación</option>
+                    </select>
+                </div>
+                <label class="option" for="sort_keys">
+                <input id="sort_keys" type="checkbox" />
+                <span>Ordenar claves</span>
+                </label>
+                </div>
+                </div>
 
         <!-- ===== Resultado ===== -->
         <section id="output_panel" class="pane pane_output" role="tabpanel" aria-labelledby="tab_format">
-          <div class="pane_header">
-            <label for="json_output">Resultado</label>
-          </div>
-          <textarea id="json_output" class="code_box" rows="10" readonly spellcheck="false" placeholder="Aquí aparece el resultado"></textarea>
+            <div class="pane_header">
+                <label for="json_output">Resultado</label>
+            </div>
+            <textarea id="json_output" class="code_box" rows="10" readonly spellcheck="false"
+                placeholder="Aquí aparece el resultado"></textarea>
 
-          <p id="json_stats" class="stats" hidden></p>
+            <p id="json_stats" class="stats" hidden></p>
 
-          <div class="output_buttons">
+            <div class="output_buttons">
             <button id="copy_button" class="button button_primary" type="button" disabled>
-              <i class="fa-regular fa-copy" aria-hidden="true"></i> <span id="copy_label">Copiar</span>
+                <i class="fa-regular fa-copy" aria-hidden="true"></i>
+                <span id="copy_label">Copiar</span>
             </button>
             <button id="download_button" class="button button_secondary" type="button" disabled>
-              <i class="fa-solid fa-download" aria-hidden="true"></i> Descargar
+                <i class="fa-solid fa-download" aria-hidden="true"></i>
+                Descargar
             </button>
-          </div>
-        </section>
-      </div>
+            </div>
+            </section>
+            </div>
 
-      <!-- Avisa a lectores de pantalla cuando se copia o se descarga algo -->
-      <p id="live_status" class="visually_hidden" role="status"></p>
+        <!-- Avisa a lectores de pantalla cuando se copia o se descarga algo -->
+        <p id="live_status" class="visually_hidden" role="status"></p>
+<footer class="copyright">
+    <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+</footer>
     </section>
-  </main>
+    </main>
 
-  <script type="module" src="./js/main.js"></script>
-</body>
+    <script type="module" src="./js/main.js"></script>
+    </body>
 </html>

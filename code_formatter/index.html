@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Formateador de código</title>
+    <meta
+      name="description"
+      content="Pega CSS, HTML o SQL y déjalo ordenado: formatéalo con sangría o minifícalo, mira dónde hay un problema y copia o descarga el resultado. Todo se queda en tu navegador."
+    />
+    <link rel="icon" href="./assets/icons/favicon.ico" sizes="any" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+    />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Enlace para saltar directo al contenido con teclado -->
+    <a class="skip_link" href="#main_content">Ir al contenido</a>
+
+    <!-- Fondo animado: solo decoración, detrás de todo y sin recibir toques -->
+    <canvas id="scene_canvas" aria-hidden="true"></canvas>
+
+    <main id="main_content" class="page">
+      <section class="card" aria-labelledby="page_title">
+        <header class="card_header">
+          <h1 id="page_title" class="page_title">
+            <i class="fa-solid fa-file-code" aria-hidden="true"></i> Formateador
+            de código
+          </h1>
+          <p class="page_subtitle">
+            Pega tu CSS, HTML o SQL y déjalo ordenado. Nada sale de tu
+            navegador.
+          </p>
+        </header>
+
+        <div class="workspace">
+          <!-- ===== Entrada ===== -->
+          <section class="pane pane_input" aria-labelledby="input_label">
+            <div class="pane_header">
+              <label id="input_label" for="code_input">Entrada</label>
+              <button
+                id="clear_button"
+                class="button button_secondary button_small"
+                type="button"
+                disabled
+              >
+                <i class="fa-regular fa-trash-can" aria-hidden="true"></i>
+                Limpiar
+              </button>
+            </div>
+            <textarea
+              id="code_input"
+              class="code_box"
+              rows="10"
+              spellcheck="false"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              placeholder="Pega aquí tu código"
+              aria-describedby="code_status"
+            ></textarea>
+
+            <!-- Estado en vivo: listo (con el lenguaje) o un aviso con su línea -->
+            <div id="code_status" class="status" role="status">
+              <p id="status_ready" class="status_ready" hidden>
+                <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                <span id="status_ready_text"></span>
+              </p>
+              <div id="status_warning" class="status_warning" hidden>
+                <p>
+                  <i
+                    class="fa-solid fa-triangle-exclamation"
+                    aria-hidden="true"
+                  ></i>
+                  <span id="status_warning_text"></span>
+                </p>
+                <button
+                  id="go_to_line_button"
+                  class="button button_secondary button_small"
+                  type="button"
+                >
+                  <i
+                    class="fa-solid fa-location-crosshairs"
+                    aria-hidden="true"
+                  ></i>
+                  Ir a la línea
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <!-- ===== Opciones ===== -->
+          <div class="options_bar">
+            <!-- Modo. El valor de data-mode es el nombre del modo en js/main.js -->
+            <div class="tabs" role="tablist" aria-label="Modo">
+              <button
+                id="tab_format"
+                class="tab"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="output_panel"
+                data-mode="format"
+              >
+                <i class="fa-solid fa-align-left" aria-hidden="true"></i>
+                Formateado
+              </button>
+              <button
+                id="tab_minify"
+                class="tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="output_panel"
+                tabindex="-1"
+                data-mode="minify"
+              >
+                <i class="fa-solid fa-compress" aria-hidden="true"></i>
+                Minificado
+              </button>
+            </div>
+
+            <div class="options_row">
+              <div class="field">
+                <label for="language_select">Lenguaje</label>
+                <select id="language_select">
+                  <option value="auto" selected>Detectar</option>
+                  <option value="css">CSS</option>
+                  <option value="html">HTML</option>
+                  <option value="sql">SQL</option>
+                  <option value="text">Texto</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="indent_select">Sangría</label>
+                <select id="indent_select">
+                  <option value="2" selected>2 espacios</option>
+                  <option value="4">4 espacios</option>
+                  <option value="tab">Tabulación</option>
+                </select>
+              </div>
+              <!-- Solo se ve con SQL -->
+              <label
+                id="uppercase_option"
+                class="option"
+                for="uppercase_keywords"
+                hidden
+              >
+                <input id="uppercase_keywords" type="checkbox" checked />
+                <span>Palabras clave en mayúscula</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- ===== Resultado ===== -->
+          <section
+            id="output_panel"
+            class="pane pane_output"
+            role="tabpanel"
+            aria-labelledby="tab_format"
+          >
+            <div class="pane_header">
+              <label for="code_output">Resultado</label>
+            </div>
+            <textarea
+              id="code_output"
+              class="code_box"
+              rows="8"
+              readonly
+              spellcheck="false"
+              placeholder="Aquí aparece el resultado"
+            ></textarea>
+
+            <p id="code_stats" class="stats" hidden></p>
+
+            <div class="output_buttons">
+              <button
+                id="copy_button"
+                class="button button_primary"
+                type="button"
+                disabled
+              >
+                <i class="fa-regular fa-copy" aria-hidden="true"></i>
+                <span id="copy_label">Copiar</span>
+              </button>
+              <button
+                id="download_button"
+                class="button button_secondary"
+                type="button"
+                disabled
+              >
+                <i class="fa-solid fa-download" aria-hidden="true"></i>
+                Descargar
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <!-- Avisa a lectores de pantalla cuando se copia o se descarga algo -->
+        <p id="live_status" class="visually_hidden" role="status"></p>
+
+        <footer class="copyright">
+          <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+        </footer>
+      </section>
+    </main>
+
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>
