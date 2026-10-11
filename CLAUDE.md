@@ -155,9 +155,11 @@ projects/
 ├── materials_calculator/
 ├── measurement_calculator/
 ├── password_generator/
+├── quotes_and_bills/
 ├── random_generator/
 ├── text_diff/
-└── to_do_list/
+├── to_do_list/
+└── warehouse_dashboard/
 ```
 
 ## 2.5 Estructura fija de cada proyecto
@@ -287,9 +289,11 @@ Un proyecto no se considera terminado hasta cumplir **todo** esto:
 | `materials_calculator` | Calculadora de materiales | Cuánto material comprar para obras pequeñas, con las presentaciones de Colombia: ladrillos y mortero de un muro, cemento, arena y grava del concreto, pañete y pintura, y baldosa, pegante y boquilla de un piso. Redondea hacia arriba a lo que se compra, permite ajustar el desperdicio y copiar la lista de compras. Recuerda los últimos valores. Fondo 3D sutil. |
 | `measurement_calculator` | Calculadora de medidas | Convierte al instante entre unidades de longitud, masa, volumen, temperatura, área, tiempo, cocina (con pesos por ingrediente), velocidad, datos, energía y presión. Recuerda la última conversión. Fondo 3D sutil. |
 | `password_generator` | Generador de contraseñas | Genera contraseñas seguras al azar con longitud y tipos de caracteres a elegir, y las copia con un toque. No guarda ninguna contraseña; solo recuerda las opciones. Fondo 3D sutil. |
+| `quotes_and_bills` | Cotizaciones y cuentas de cobro | Para un negocio pequeño o una persona independiente: se escriben los datos del negocio una sola vez (con logo), se guardan clientes y productos, y cada cotización o cuenta de cobro sale eligiendo cliente, agregando renglones y revisando el total con IVA y retención en pesos colombianos. Numeración consecutiva que nunca se repite, estados (borrador, enviada, aceptada, pagada, vencida), una cotización aceptada se convierte en cuenta de cobro, y un resumen del mes. Entrega en PDF con un escritor de PDF propio (sin librerías), impresión y envío por WhatsApp o correo. No es facturación electrónica. Se guarda solo en el navegador (`localStorage`), con Exportar e Importar en JSON. Fondo 3D sutil. |
 | `random_generator` | Generador aleatorio | Deja el azar decidir de forma justa: saca números en un rango (con o sin repetir, ordenados), elige a alguien de una lista (también quitando a quien sale), la mezcla o la reparte en equipos, y tira dados de 4 a 100 caras o monedas (Cara y Sello). Usa el azar del sistema (`crypto.getRandomValues`) con muestreo por rechazo, sin sesgo, y nunca `Math.random` para decidir. Resultado grande, animación breve de tirada, historial de las últimas 50 tiradas y Copiar. Nada sale del navegador; recuerda las opciones, la lista y el historial. Fondo 3D sutil con dados. |
 | `text_diff` | Comparador de textos | Pega dos textos (o abre dos archivos) y ve qué cambió: líneas quitadas y agregadas con el algoritmo de Myers, y las palabras distintas dentro de cada línea modificada. Vista unificada o lado a lado, solo cambios (con las líneas iguales plegadas), ignorar espacios y mayúsculas, saltar de cambio en cambio, y copiar o descargar el resultado en formato `diff` unificado. Lo que se muestra es siempre el texto tal cual. Nada sale del navegador; recuerda las opciones y los dos últimos textos cortos. Fondo 3D sutil. |
 | `to_do_list` | Lista de tareas | Lista de tareas personal: título, fecha límite, prioridad y nota opcionales; las pendientes se agrupan solas por cuándo tocan (vencidas, hoy, mañana, esta semana, más adelante, sin fecha) y las hechas quedan plegadas al final. Edición en un diálogo, borrado con Deshacer, búsqueda sin tildes ni mayúsculas, filtro Pendientes/Hechas/Todas, y Exportar e Importar en JSON como respaldo. Las fechas son claves `AAAA-MM-DD` sin zona horaria. Se guarda solo en el navegador (`localStorage`). Fondo 3D sutil. |
+| `warehouse_dashboard` | Simulador de centro de distribución | Simulador 3D isométrico de un centro de distribución que muestra todo el ciclo de la mercancía: tractomulas que llegan, hacen cola y descargan por rieles; cada caja (de un solo SKU, 20 SKU en 5 pisos) se reparte 70 % a pallets de reserva y 30 % a cubetas que suben por un elevador al multinivel activo; montacargas que guardan pallets y reabastecen por umbral; pedidos que los operarios de cada piso recogen hacia bandas que bajan por una espiral a la banda principal, muros de consolidación, empaque y despacho, con camiones que salen por horario. Se pausa, se acelera (1×, 2×, 5×, 10×), se reinicia con una semilla (la misma semilla repite la corrida exacta), tiene sliders en vivo, KPIs, panel de inspección con lista y buscador, cuatro disrupciones (banda caída, montacarga en mantenimiento, pico de pedidos, camión retrasado), alertas de pedidos atascados que la persona administradora puede cancelar o reprocesar, y sonido ambiente con Web Audio. La simulación y el azar son propios (sin `Math.random`). Recuerda los sliders, la semilla, la velocidad y el silencio (`localStorage`). |
 
 ## 2.13 Cómo agregar un proyecto nuevo
 

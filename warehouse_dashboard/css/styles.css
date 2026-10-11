@@ -1,0 +1,952 @@
+/* Simulador de centro de distribución. Tema oscuro: el lienzo 3D ocupa toda la ventana y la interfaz flota encima en
+   paneles de vidrio oscuro. Acento cian para lo activo, ámbar para el foco, rojo para alertas, verde para lo completo. */
+
+:root {
+  --bg: #0b1220;
+  --panel: rgba(15, 23, 38, 0.93);
+  --panel_solid: #0f1726;
+  --border_soft: #2a3a52;
+  /* Borde de controles: 3,7 a 1 contra el panel, lo que pide WCAG para componentes de interfaz */
+  --border_strong: #5b7394;
+  --text: #e8eef7;
+  --text_muted: #a9b8cc;
+  --accent: #22d3ee;
+  --accent_ink: #04222b;
+  /* El foco es ámbar para no confundirse con el acento cian de lo activo */
+  --focus: #fbbf24;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --radius: 12px;
+  --control_size: 40px;
+  --gap: 8px;
+  /* Los fija ui.js según lo que mide la barra superior; estos son valores de respaldo */
+  --top_space: 64px;
+  --bottom_space: 84px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+.visually_hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip_link {
+  position: fixed;
+  left: 8px;
+  top: -60px;
+  z-index: 100;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent_ink);
+  font-weight: 600;
+}
+
+.skip_link:focus {
+  top: 8px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---- Escena ---- */
+.scene_container {
+  position: fixed;
+  inset: 0;
+}
+
+.scene_canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* Sin esto el navegador se queda con el pellizco y el arrastre del dedo */
+  touch-action: none;
+}
+
+.scene_canvas.is_dragging {
+  cursor: grabbing;
+}
+
+.scene_canvas:focus-visible {
+  /* Aro ámbar con una franja oscura por dentro: así se ve igual sobre el fondo oscuro y sobre el piso claro de la bodega */
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 6px var(--bg);
+}
+
+.scene_message {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(440px, calc(100% - 32px));
+  transform: translate(-50%, -50%);
+  padding: 16px 18px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--panel_solid);
+  text-align: center;
+}
+
+.scene_message[hidden] {
+  display: none;
+}
+
+/* ---- Barra superior ---- */
+.top_bar {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  /* Los huecos entre los grupos dejan pasar el arrastre al lienzo */
+  pointer-events: none;
+}
+
+.top_group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border_soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  pointer-events: auto;
+  /* En pantallas muy angostas un grupo se parte en dos renglones en lugar de salirse de la ventana */
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.icon_button,
+.text_button,
+.dock_button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: var(--control_size);
+  height: var(--control_size);
+  padding: 0 10px;
+  border: 1px solid var(--border_strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.icon_button:hover,
+.text_button:hover,
+.dock_button:hover {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: var(--accent);
+}
+
+.icon_button:active,
+.text_button:active,
+.dock_button:active {
+  background: rgba(34, 211, 238, 0.22);
+}
+
+.text_button_primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent_ink);
+  font-weight: 600;
+}
+
+.text_button_primary:hover {
+  background: #67e8f9;
+}
+
+/* Silencio: dos iconos y se muestra el que corresponde al estado */
+.icon_sound_off {
+  display: none;
+}
+
+#mute_button[aria-pressed="true"] .icon_sound_on {
+  display: none;
+}
+
+#mute_button[aria-pressed="true"] .icon_sound_off {
+  display: inline;
+}
+
+#mute_button[aria-pressed="true"] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* Velocidad: botones de opción en segmentos */
+.speed_group {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 4px;
+}
+
+.speed_input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.speed_label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: var(--control_size);
+  padding: 0 8px;
+  border: 1px solid var(--border_strong);
+  border-radius: 10px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.speed_label:hover {
+  border-color: var(--accent);
+}
+
+.speed_input:checked + .speed_label {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent_ink);
+  font-weight: 600;
+}
+
+.speed_input:focus-visible + .speed_label {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.seed_label {
+  padding-left: 6px;
+  color: var(--text_muted);
+  font-size: 0.875rem;
+}
+
+.seed_input {
+  width: 8.5rem;
+  height: var(--control_size);
+  padding: 0 10px;
+  border: 1px solid var(--border_strong);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Barra inferior ---- */
+.dock {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+  max-width: calc(100% - 16px);
+  padding: 6px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border_soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.dock_button[aria-expanded="true"] {
+  background: rgba(34, 211, 238, 0.18);
+  border-color: var(--accent);
+}
+
+.copyright {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding: 3px 8px;
+  background: rgba(11, 18, 32, 0.88);
+  color: var(--text_muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* ---- Cajones ---- */
+.drawer {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border_strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  visibility: hidden;
+  opacity: 0;
+  /* Al cerrar, la visibilidad se retrasa lo que dura la animación; al abrir es inmediata, para poder enfocar el cajón al instante */
+  transition: transform 0.2s ease, opacity 0.2s ease, visibility 0s linear 0.2s;
+}
+
+.drawer.is_open {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition-delay: 0s;
+}
+
+.drawer_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--border_soft);
+}
+
+.drawer_header h2 {
+  font-size: 1.05rem;
+}
+
+.drawer_body {
+  flex: 1;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.placeholder {
+  color: var(--text_muted);
+}
+
+/* Pantallas anchas: parámetros a la izquierda, indicadores a la derecha, inspección abajo al centro */
+.drawer_left {
+  left: 8px;
+  top: calc(var(--top_space) + 8px);
+  bottom: var(--bottom_space);
+  width: 320px;
+  transform: translateX(-24px);
+}
+
+.drawer_right {
+  right: 8px;
+  top: calc(var(--top_space) + 8px);
+  bottom: var(--bottom_space);
+  width: 320px;
+  transform: translateX(24px);
+}
+
+.drawer_center {
+  left: 50%;
+  bottom: var(--bottom_space);
+  width: min(380px, calc(100% - 16px));
+  max-height: min(62vh, calc(100dvh - var(--top_space) - var(--bottom_space) - 16px));
+  margin-left: calc(min(380px, 100% - 16px) / -2);
+  transform: translateY(24px);
+}
+
+/* ---- Contenido de los paneles ---- */
+.drawer_footer {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border_soft);
+}
+
+.drawer_body h3,
+.panel_section h3 {
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text_muted);
+}
+
+.drawer_body h4 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.param_group,
+.kpi_group,
+.panel_section {
+  margin-bottom: 18px;
+}
+
+.param_row {
+  margin-bottom: 12px;
+}
+
+.param_row label {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.875rem;
+}
+
+.param_value {
+  flex: none;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.param_slider {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.param_note {
+  margin-top: 0;
+  color: var(--text_muted);
+  font-size: 0.75rem;
+}
+
+.kpi_list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.kpi_row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 8px;
+  align-items: baseline;
+}
+
+.kpi_row dt {
+  color: var(--text_muted);
+  font-size: 0.875rem;
+}
+
+.kpi_row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.bar_track {
+  grid-column: 1 / -1;
+  height: 6px;
+  margin-top: 3px;
+  border-radius: 3px;
+  background: var(--border_soft);
+  overflow: hidden;
+}
+
+.bar_fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.detail_list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+.detail_list div {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr;
+  gap: 8px;
+}
+
+.detail_list dt {
+  color: var(--text_muted);
+  font-size: 0.875rem;
+}
+
+.detail_list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.detail_actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.item_list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list_heading {
+  margin-top: 8px;
+  color: var(--text_muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.list_button {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border_soft);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.list_button:hover {
+  border-color: var(--accent);
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.list_button[aria-current="true"] {
+  border-color: var(--accent);
+  background: rgba(34, 211, 238, 0.2);
+}
+
+.problem_item {
+  padding: 8px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+}
+
+.problem_item p {
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+}
+
+.search_input {
+  width: 100%;
+  height: var(--control_size);
+  margin-bottom: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border_strong);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.text_button_small {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 0.8125rem;
+}
+
+.text_button_danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.text_button_danger:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: var(--danger);
+}
+
+.disruption_list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.disruption_button {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border_strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.disruption_button:hover {
+  border-color: var(--accent);
+}
+
+.disruption_button[aria-pressed="true"] {
+  border-color: var(--warn);
+  background: rgba(251, 191, 36, 0.14);
+}
+
+.disruption_text {
+  display: grid;
+  gap: 2px;
+}
+
+.disruption_text small {
+  color: var(--text_muted);
+  font-size: 0.8125rem;
+}
+
+/* ---- Avisos sobre la escena ---- */
+.alert_stack {
+  position: fixed;
+  top: calc(var(--top_space) + 8px);
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  gap: 6px;
+  width: min(380px, calc(100% - 16px));
+  transform: translateX(-50%);
+  /* Los huecos dejan pasar el arrastre al lienzo */
+  pointer-events: none;
+}
+
+.alert_banner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--border_strong);
+  border-left-width: 5px;
+  border-radius: 10px;
+  background: var(--panel_solid);
+  pointer-events: auto;
+}
+
+.alert_danger {
+  border-color: var(--danger);
+}
+
+.alert_warn {
+  border-color: var(--warn);
+}
+
+.alert_info {
+  border-color: var(--accent);
+}
+
+.alert_text {
+  font-size: 0.875rem;
+}
+
+.alert_countdown {
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.alert_actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.alert_actions:empty {
+  display: none;
+}
+
+.dialog_actions_wrap {
+  flex-wrap: wrap;
+}
+
+/* ---- Leyenda y avisos ---- */
+.legend_panel {
+  position: fixed;
+  left: 8px;
+  bottom: calc(var(--bottom_space) + 36px);
+  z-index: 25;
+  width: min(340px, calc(100% - 16px));
+  padding: 12px 14px;
+  border: 1px solid var(--border_strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.legend_panel[hidden] {
+  display: none;
+}
+
+.legend_panel h2 {
+  margin-bottom: 8px;
+  font-size: 1.05rem;
+}
+
+.legend_list,
+.sku_legend {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend_list li,
+.sku_legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend_subtitle {
+  margin: 12px 0 6px;
+  color: var(--text_muted);
+  font-size: 0.875rem;
+}
+
+.sku_legend {
+  grid-template-columns: repeat(3, 1fr);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 4px;
+}
+
+.swatch_complete {
+  background: var(--ok);
+}
+
+.swatch_partial {
+  background: var(--warn);
+}
+
+.swatch_alert {
+  background: var(--danger);
+}
+
+.fps_badge {
+  position: fixed;
+  left: 8px;
+  z-index: 25;
+  padding: 4px 10px;
+  border: 1px solid var(--border_soft);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.fps_badge {
+  bottom: var(--bottom_space);
+}
+
+.fps_badge[hidden] {
+  display: none;
+}
+
+/* ---- Diálogos ---- */
+.dialog {
+  width: min(460px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--border_strong);
+  border-radius: var(--radius);
+  background: var(--panel_solid);
+  color: var(--text);
+}
+
+.dialog::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.dialog h2 {
+  margin-bottom: 8px;
+  font-size: 1.15rem;
+}
+
+.dialog_actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gap);
+  margin-top: 16px;
+}
+
+.shortcut_list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.shortcut_list div {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut_list dt,
+.shortcut_list dd {
+  margin: 0;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.7em;
+  padding: 1px 6px;
+  border: 1px solid var(--border_strong);
+  border-radius: 6px;
+  background: var(--bg);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ---- Pantallas estrechas ---- */
+@media (max-width: 1099px) {
+  /* Los tres paneles se vuelven cajones que suben desde abajo */
+  .drawer_left,
+  .drawer_right,
+  .drawer_center {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: var(--bottom_space);
+    width: auto;
+    max-height: min(62vh, calc(100dvh - var(--top_space) - var(--bottom_space) - 16px));
+    margin-left: 0;
+    transform: translateY(24px);
+  }
+}
+
+@media (max-width: 1099px) {
+  .alert_stack {
+    left: 8px;
+    width: auto;
+    right: 8px;
+    transform: none;
+  }
+}
+
+@media (max-width: 599px) {
+  :root {
+    --control_size: 38px;
+    --gap: 6px;
+  }
+
+  .top_bar {
+    top: 6px;
+    left: 6px;
+    right: 6px;
+  }
+
+  .top_group {
+    padding: 4px;
+    gap: 4px;
+  }
+
+  .seed_input {
+    width: 6.5rem;
+  }
+
+  .speed_group {
+    gap: 3px;
+  }
+
+  .speed_label {
+    min-width: 34px;
+    padding: 0 4px;
+  }
+
+  .clock {
+    gap: 6px;
+    padding: 0 4px;
+    font-size: 0.9375rem;
+  }
+
+  .dock_button {
+    padding: 0;
+    width: var(--control_size);
+  }
+
+  /* En el celular los botones de la barra inferior son solo icono, pero siguen teniendo su nombre para lectores de pantalla */
+  .dock_button span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .shortcut_list div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* Con puntero táctil, los controles miden al menos 44 px */
+@media (max-width: 399px) {
+  /* El icono del reloj sobra: la hora ya se entiende sola */
+  .clock i {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --control_size: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer {
+    transition: none;
+  }
+}
