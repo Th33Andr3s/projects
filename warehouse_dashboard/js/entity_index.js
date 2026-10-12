@@ -17,13 +17,14 @@ export function list_entities(sim) {
   sim.receiving.trucks.forEach((truck) => items.push(item("Camiones", truck, `Camión de recibo ${truck.id}`, truck.machine.label)));
   sim.outbound.trucks.forEach((truck) => items.push(item("Camiones", truck, `Camión de despacho ${truck.id}`, truck.machine.label)));
   sim.forklifts.forEach((forklift) => {
-    const fleet = forklift.fleet === "dock" ? "muelle a stock" : "stock a racks y multinivel";
+    const fleet = { dock: "muelle a stock", stock: "stock a reserva", replen: "reserva a activo" }[forklift.fleet];
     items.push(item("Montacargas", forklift, `Montacargas ${forklift.id} (${fleet})`, forklift.machine.label));
   });
   sim.orders.pickers.flat().forEach((worker) => items.push(item("Personas", worker, `Operario de picking ${worker.id} (piso ${worker.floor + 1})`, worker.machine.label)));
   sim.outbound.operators.forEach((worker) => items.push(item("Personas", worker, `Operario de muro ${worker.id}`, worker.machine.label)));
   sim.outbound.packers.forEach((worker) => items.push(item("Personas", worker, `Empacador ${worker.id}`, worker.machine.label)));
-  sim.orders.orders.forEach((order) => items.push(item("Pedidos", order, `Pedido #${order.id}`, order.machine.label)));
+  // La lista de pedidos cambia de orden al sacar uno (ver OrdersSystem.remove_order): se muestran por número
+  [...sim.orders.orders].sort((first, second) => first.id - second.id).forEach((order) => items.push(item("Pedidos", order, `Pedido #${order.id}`, order.machine.label)));
   sim.pallets.forEach((pallet) => {
     // Los pallets guardados en la reserva son muchos; solo se listan los que están en movimiento o formándose
     if (pallet.machine.state !== "IN_RESERVE") items.push(item("Pallets", pallet, `Pallet ${pallet.id} (${sku_name(pallet.sku_id)})`, pallet.machine.label));
@@ -41,7 +42,10 @@ export function list_entities(sim) {
   });
   sim.outbound.stations.forEach((station) => items.push(item("Empaque", station, `Estación ${station.index + 1}`, station.enabled ? station.machine.label : "Cerrada")));
   sim.receiving.stacks.forEach((stack) => {
-    if (stack.boxes > 0) items.push(item("Bodega de recibo", stack, `Pila de ${sku_label(stack.sku_id)}`, `${stack.boxes} cajas`));
+    if (stack.boxes > 0) items.push(item("Bodega de stock", stack, `Pila de ${sku_label(stack.sku_id)}`, `${stack.boxes} cajas`));
+  });
+  sim.storage.segments.forEach((segment) => {
+    if (segment.boxes.length > 0) items.push(item("Activo", segment.shelf, `Estante del piso ${segment.floor + 1}: ${sku_label(segment.sku_id)}`, `${segment.boxes.length} cajas`));
   });
   sim.outbound.bins.forEach((bin) => {
     if (bin.parcels.length > 0) items.push(item("Despacho por destino", bin, `Pila de ${bin.destination.text}`, `${bin.parcels.length} pedidos`));

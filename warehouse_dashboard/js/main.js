@@ -1,8 +1,8 @@
 // Arranque y bucle del simulador: une el reloj, la simulación, la escena 3D, la interfaz y el sonido. Aquí se decide qué pasa
-// cuando la persona elige algo, cancela un pedido, activa una disrupción, reinicia con otra semilla o vuelve a los valores de
+// cuando la persona elige algo, cancela un pedido, activa una disrupción, reinicia o vuelve a los valores de
 // fábrica, y se guardan y recuperan los ajustes.
 
-import { Config, DEFAULT_SEED, SIM_START_HOUR } from "./config.js";
+import { Config, SIM_START_HOUR } from "./config.js";
 import { SimClock } from "./sim_clock.js";
 import { build_layout } from "./layout.js";
 import { YardConfig } from "./yard_config.js";
@@ -13,6 +13,8 @@ import { create_ui } from "./ui.js";
 import { create_audio } from "./audio.js";
 import { clear_settings, load_settings, save_settings } from "./settings.js";
 import { format_clock_display, format_fps } from "./format.js";
+import { SKUS, catalog_to_json, default_catalog } from "./catalog.js";
+import { allocation_from_json, allocation_to_json, default_allocation_json } from "./active_layout.js";
 
 // Cada cuánto se calculan los cuadros por segundo y a partir de cuántos se considera que el equipo no da abasto
 const FPS_WINDOW_SECONDS = 0.5;
@@ -44,8 +46,16 @@ function today_start_ms() {
   return Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), SIM_START_HOUR, 0, 0);
 }
 
-let seed = saved.seed === undefined ? DEFAULT_SEED : saved.seed;
-let sim = new Simulation(config, yard, layout, seed, today_start_ms());
+// Qué producto va en cada piso del activo: lo guardado o la distribución de fábrica. La escena estática lo lee de `layout`.
+const allocation = allocation_from_json(saved.allocation);
+layout.allocation = allocation;
+
+// Cada corrida usa un azar distinto: la semilla sale del navegador y no se le pide a la persona
+function random_seed() {
+  return window.crypto.getRandomValues(new Uint32Array(1))[0];
+}
+
+let sim = new Simulation(config, yard, layout, random_seed(), today_start_ms(), allocation);
 let is_muted = saved.muted === true;
 let is_fps_visible = false;
 let scene = null;
@@ -69,9 +79,13 @@ function request_save() {
   save_timer = 0;
 }
 
+function current_settings() {
+  return { params: config.to_json(), yard: yard.to_json(), speed: clock.speed_factor, muted: is_muted, catalog: catalog_to_json(), allocation: allocation_to_json(allocation) };
+}
+
 function save_now() {
   save_pending = false;
-  save_settings({ params: config.to_json(), yard: yard.to_json(), seed, speed: clock.speed_factor, muted: is_muted });
+  save_settings(current_settings());
 }
 
 config.subscribe(request_save);
@@ -100,34 +114,43 @@ const ui = create_ui(config, yard, {
     ui.announce(`Velocidad ${factor}×.`);
     request_save();
   },
-  on_reset(new_seed, empty_inventory = false) {
-    seed = new_seed;
-    // Reiniciar el inventario: sin relleno inicial, para que de verdad empiece en cero
-    if (empty_inventory) {
-      config.set("initial_active_fill", 0);
-      config.set("initial_reserve_fill", 0);
-    }
+  on_reset() {
     clock.reset();
     sim.dispose();
-    sim = new Simulation(config, yard, layout, seed, today_start_ms());
+    sim = new Simulation(config, yard, layout, random_seed(), today_start_ms(), allocation);
     if (scene) scene.attach_simulation(sim);
     ui.set_playing(true);
     ui.set_speed(1);
+    ui.set_ecommerce(sim.ecommerce_enabled);
     ui.reset_panels(sim);
     ui.update(sim, real_time * 1000);
-    ui.announce(empty_inventory ? `Inventario en cero. Simulación reiniciada con la semilla ${seed}.` : `Simulación reiniciada con la semilla ${seed}.`);
+    ui.announce("Simulación reiniciada. Inventario en cero y e-commerce apagado.");
     request_save();
+  },
+  // Mercancía: el catálogo y la distribución del activo nuevos se guardan y la página se recarga, así toda la bodega se arma de cero
+  merchandise: {
+    catalog: catalog_to_json(),
+    allocation: allocation_to_json(allocation),
+    keys: SKUS.map((sku) => sku.key),
+    factory: () => ({ catalog: default_catalog(), allocation: default_allocation_json(default_catalog()) }),
+    on_apply(catalog, allocation_json) {
+      save_settings({ ...current_settings(), catalog, allocation: allocation_json });
+      window.location.reload();
+    },
+  },
+  on_toggle_ecommerce() {
+    sim.set_ecommerce(!sim.ecommerce_enabled);
+    ui.set_ecommerce(sim.ecommerce_enabled);
+    ui.announce(sim.ecommerce_enabled ? "E-commerce encendido: llegan pedidos de clientes." : "E-commerce apagado: no entran pedidos nuevos; los que están en proceso terminan.");
   },
   on_factory_reset() {
     config.reset();
     yard.reset();
     clock.set_speed(1);
     ui.set_speed(1);
-    seed = DEFAULT_SEED;
-    ui.set_seed(seed);
     clear_settings();
     save_pending = false;
-    ui.announce("Valores de fábrica restaurados. Los de inicio se aplican al reiniciar.");
+    ui.announce("Valores de fábrica restaurados.");
   },
   on_rotate(step) {
     if (!scene) return;
@@ -188,7 +211,7 @@ const ui = create_ui(config, yard, {
 
 clock.set_speed(saved.speed || 1);
 ui.set_speed(clock.speed_factor);
-ui.set_seed(seed);
+ui.set_ecommerce(sim.ecommerce_enabled);
 ui.set_muted(is_muted);
 audio.set_muted(is_muted);
 ui.update(sim, 0);

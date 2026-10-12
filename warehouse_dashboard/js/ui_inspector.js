@@ -13,8 +13,11 @@ function make_button(text, class_name, on_click) {
   return button;
 }
 
+// Cuántos pedidos con problema se listan como máximo
+const MAX_PROBLEMS_SHOWN = 30;
+
 export function build_inspector(elements, handlers) {
-  const { details, problem_list, problem_empty, search, count, list } = elements;
+  const { details, problem_list, problem_empty, search, group, count, list } = elements;
   let selected = null;
   let details_signature = "";
   let field_values = [];
@@ -90,12 +93,13 @@ export function build_inspector(elements, handlers) {
   // ---------- Pedidos con problema ----------
   function update_problems(sim) {
     const alerts = sim.alerts.filter((alert) => alert.order_id !== undefined);
-    const signature = alerts.map((alert) => `${alert.key}:${alert.text}`).join("|");
+    const signature = `${alerts.length}|${alerts.slice(0, MAX_PROBLEMS_SHOWN).map((alert) => `${alert.key}:${alert.text}`).join("|")}`;
     if (signature === problem_signature) return;
     problem_signature = signature;
     problem_list.replaceChildren();
     problem_empty.hidden = alerts.length > 0;
-    alerts.forEach((alert) => {
+    // Con muchos pedidos con problema solo se listan los primeros (la cancelación masiva los atiende a todos)
+    alerts.slice(0, MAX_PROBLEMS_SHOWN).forEach((alert) => {
       const order = sim.orders.orders.find((candidate) => candidate.id === alert.order_id);
       if (!order) return;
       const item = document.createElement("li");
@@ -121,7 +125,8 @@ export function build_inspector(elements, handlers) {
   }
 
   function render_list() {
-    const { shown, total } = filter_entities(all_items, search.value, MAX_LIST_ITEMS);
+    const items = group.value === "" ? all_items : all_items.filter((entry) => entry.group === group.value);
+    const { shown, total } = filter_entities(items, search.value, MAX_LIST_ITEMS);
     list.replaceChildren();
     let current_group = null;
     shown.forEach((entry) => {
@@ -146,10 +151,26 @@ export function build_inspector(elements, handlers) {
     // Si el foco está dentro de la lista no se redibuja: quien navega con teclado perdería el lugar
     if (!force && list.contains(document.activeElement)) return;
     all_items = list_entities(sim);
+    // La lista de tipos sigue a lo que hay: si el elegido ya no existe, vuelve a "Todos"
+    const groups = [...new Set(all_items.map((entry) => entry.group))];
+    const signature = groups.join("|");
+    if (group.dataset.signature !== signature) {
+      const chosen = group.value;
+      group.dataset.signature = signature;
+      group.replaceChildren();
+      [["", "Todos los tipos"], ...groups.map((name) => [name, name])].forEach(([value, text]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = text;
+        group.append(option);
+      });
+      group.value = groups.includes(chosen) ? chosen : "";
+    }
     render_list();
   }
 
   search.addEventListener("input", () => render_list());
+  group.addEventListener("change", () => render_list());
 
   return {
     show,

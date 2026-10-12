@@ -1,11 +1,11 @@
 // El panel de parámetros: un slider por cada valor de PARAMETERS, agrupados por sección. Cada cambio se aplica al instante en
-// la simulación (salvo los del inicio, que esperan al reinicio) y el panel sigue a Config cuando el valor cambia por otro lado,
-// por ejemplo con "Valores de fábrica" o al cargar lo guardado.
+// la simulación y el panel sigue a Config cuando el valor cambia por otro lado, por ejemplo con "Valores de fábrica" o al cargar
+// lo guardado.
 
 import { PARAMETERS, PARAMETER_GROUPS } from "./config.js";
 import { format_parameter_value } from "./format.js";
 
-export function build_params_panel(config, body, handlers) {
+export function build_params_panel(config, body) {
   const controls = new Map();
 
   PARAMETER_GROUPS.forEach((group) => {
@@ -29,12 +29,20 @@ export function build_params_panel(config, body, handlers) {
       label.append(output);
 
       const input = document.createElement("input");
-      input.type = "range";
+      const is_open = parameter.input === "number";
       input.id = id;
-      input.min = String(parameter.min);
-      input.max = String(parameter.max);
       input.step = String(parameter.step);
-      input.className = "param_slider";
+      input.min = String(parameter.min);
+      if (is_open) {
+        // Un campo abierto: sin tope. Se aplica al terminar de escribir (cambio o Enter), no tecla por tecla
+        input.type = "number";
+        input.inputMode = "numeric";
+        input.className = "number_input param_number";
+      } else {
+        input.type = "range";
+        input.max = String(parameter.max);
+        input.className = "param_slider";
+      }
 
       const show = (value) => {
         input.value = String(value);
@@ -44,20 +52,18 @@ export function build_params_panel(config, body, handlers) {
       };
       show(config.get(parameter.key));
 
-      input.addEventListener("input", () => {
+      input.addEventListener(is_open ? "change" : "input", () => {
+        if (is_open && input.value.trim() === "") {
+          show(config.get(parameter.key));
+          return;
+        }
         config.set(parameter.key, Number(input.value));
-        // Un slider que se ajusta al paso o al rango debe mostrar el valor que quedó
+        // Un valor que se ajusta al paso o al rango debe mostrar el que quedó
         show(config.get(parameter.key));
-        if (parameter.needs_restart) handlers.on_needs_restart(parameter);
       });
 
       row.append(label, input);
-      if (parameter.needs_restart) {
-        const note = document.createElement("p");
-        note.className = "param_note";
-        note.textContent = "Se aplica al reiniciar.";
-        row.append(note);
-      }
+      if (parameter.hint) row.append(Object.assign(document.createElement("p"), { className: "note", textContent: parameter.hint }));
       section.append(row);
       controls.set(parameter.key, show);
     });

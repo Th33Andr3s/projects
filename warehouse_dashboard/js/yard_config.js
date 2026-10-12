@@ -1,9 +1,8 @@
 // La configuración del patio de recibo y los muelles que maneja la persona: cuántos camiones llegan en cada franja del día, qué
-// muelles están bloqueados, qué categoría de mercancía tiene prioridad y las restricciones de cada camión. Se guarda en el
+// muelles están bloqueados, si las llegadas de camiones están detenidas, las horas de corte de los despachos y las restricciones de cada camión. Se guarda en el
 // navegador y la simulación la lee en vivo. Cambiar los camiones por franja vale para las franjas que todavía no han empezado.
 
 import { DOCK_COUNT, SIM_START_HOUR } from "./config.js";
-import { CATEGORIES } from "./catalog.js";
 import { DEFAULT_CUTOFFS, normalize_cutoffs } from "./cutoffs.js";
 
 // Las franjas en que llegan camiones. De 10 de la noche a 6 de la mañana el patio no recibe.
@@ -18,19 +17,14 @@ export const SLOT_OFFSETS = Object.fromEntries(
   SLOTS.map((slot) => [slot.key, { start: (slot.start_hour - SIM_START_HOUR) * 3600, length: (slot.end_hour - slot.start_hour) * 3600 }]),
 );
 
-// Cuánto pesa cada nivel de prioridad: al sortear qué trae cada camión y al decidir quién pasa primero a un muelle libre
-export const PRIORITY_LEVELS = [
-  { value: 1, label: "Normal" },
-  { value: 3, label: "Alta" },
-  { value: 5, label: "Máxima" },
-];
-
 export const MAX_TRUCKS_PER_SLOT = 60;
 const DEFAULT_COUNTS = { morning: 8, afternoon: 10, night: 6 };
 
 export function slot_label(slot_key) {
   const slot = SLOTS.find((candidate) => candidate.key === slot_key);
-  // "manual" son los camiones que la persona hizo llegar con el botón de llegada inmediata
+  // "manual" son los camiones que la persona hizo llegar con el botón de llegada inmediata; los otros dos los pide el coordinador
+  if (slot_key === "coordinator") return "Coordinador";
+  if (slot_key === "urgent") return "Urgente";
   return slot ? slot.label : "Manual";
 }
 
@@ -43,7 +37,8 @@ export class YardConfig {
   reset() {
     this.counts = { ...DEFAULT_COUNTS };
     this.blocked_docks = Array(DOCK_COUNT).fill(false);
-    this.priorities = CATEGORIES.map(() => 1);
+    // Llegadas detenidas "hasta nueva orden": mientras es verdad, ningún camión de recibo sale a la carretera (los programados se saltan)
+    this.arrivals_blocked = false;
     // Restricción por número de camión: { dock: índice del muelle o null, from_slot: franja o null }
     this.rules = {};
     // La entrada de camiones de despacho: cuando está cerrada no entran camiones nuevos a las puertas
@@ -88,15 +83,23 @@ export class YardConfig {
     this.notify("docks");
   }
 
-  get_priority(category_index) {
-    return this.priorities[category_index];
+  // Cierra todos los muelles de una vez (o los abre todos). Un camión que ya está descargando termina.
+  set_all_docks_blocked(blocked) {
+    const next = Boolean(blocked);
+    if (this.blocked_docks.every((value) => value === next)) return;
+    this.blocked_docks = Array(DOCK_COUNT).fill(next);
+    this.notify("docks");
   }
 
-  set_priority(category_index, value) {
-    const level = PRIORITY_LEVELS.find((candidate) => candidate.value === Number(value));
-    if (!level || this.priorities[category_index] === level.value) return;
-    this.priorities[category_index] = level.value;
-    this.notify("priorities");
+  get all_docks_blocked() {
+    return this.blocked_docks.every(Boolean);
+  }
+
+  // Detiene o reanuda la llegada de camiones de recibo. Los que ya están en la carretera o en el predio siguen su camino.
+  set_arrivals_blocked(blocked) {
+    if (this.arrivals_blocked === Boolean(blocked)) return;
+    this.arrivals_blocked = Boolean(blocked);
+    this.notify("arrivals");
   }
 
   get_rule(truck_id) {
@@ -126,7 +129,7 @@ export class YardConfig {
   }
 
   to_json() {
-    return { dispatch_blocked: this.dispatch_blocked, cutoffs: [...this.cutoffs], counts: { ...this.counts }, blocked_docks: [...this.blocked_docks], priorities: [...this.priorities], rules: JSON.parse(JSON.stringify(this.rules)) };
+    return { arrivals_blocked: this.arrivals_blocked, dispatch_blocked: this.dispatch_blocked, cutoffs: [...this.cutoffs], counts: { ...this.counts }, blocked_docks: [...this.blocked_docks], rules: JSON.parse(JSON.stringify(this.rules)) };
   }
 
   // Carga lo guardado; lo que no se reconoce se ignora
@@ -139,10 +142,8 @@ export class YardConfig {
       });
     }
     if (Array.isArray(data.blocked_docks)) this.blocked_docks = Array.from({ length: DOCK_COUNT }, (_, index) => data.blocked_docks[index] === true);
-    if (Array.isArray(data.priorities)) {
-      this.priorities = CATEGORIES.map((_, index) => (PRIORITY_LEVELS.some((level) => level.value === data.priorities[index]) ? data.priorities[index] : 1));
-    }
     this.dispatch_blocked = data.dispatch_blocked === true;
+    this.arrivals_blocked = data.arrivals_blocked === true;
     this.cutoffs = Array.isArray(data.cutoffs) ? normalize_cutoffs(data.cutoffs) : [...DEFAULT_CUTOFFS];
     if (data.rules && typeof data.rules === "object") {
       this.rules = {};

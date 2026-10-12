@@ -4,59 +4,29 @@
 
 import { MAX_CUTOFFS, DEFAULT_CUTOFFS, format_cutoff, parse_cutoff } from "./cutoffs.js";
 import { format_number, format_percent } from "./format.js";
+import { decimal_percent, download_csv, make, make_download_menu, make_filter_bar, make_table_header, matches_search } from "./table_tools.js";
 
-// Cuántos renglones del informe de camiones se muestran (los más recientes primero); el CSV lleva todos los que recuerda la simulación
+// Cuántos renglones del informe de camiones se muestran si no se piden todos (los más recientes primero); el CSV lleva todos los
+// que recuerda la simulación
 const ROWS_SHOWN = 80;
-const SEPARATOR = ";";
-
-function make(tag, class_name, text) {
-  const element = document.createElement(tag);
-  if (class_name) element.className = class_name;
-  if (text !== undefined) element.textContent = text;
-  return element;
-}
-
-// Una celda de CSV: con comillas si lleva separador, comillas o saltos de línea
-function csv_cell(value) {
-  const text = value === null || value === undefined ? "" : String(value);
-  return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-// Un porcentaje con coma decimal, como lo espera Excel en español
-function decimal_percent(ratio) {
-  return ratio === null ? "" : (ratio * 100).toFixed(1).replace(".", ",");
-}
-
-function download_csv(file_name, lines) {
-  // El BOM hace que Excel abra bien las tildes
-  const text = `﻿${lines.map((line) => line.map(csv_cell).join(SEPARATOR)).join("\r\n")}\r\n`;
-  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
-  const link = make("a");
-  link.href = url;
-  link.download = file_name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 // Los renglones del CSV de OTD por día de entrega prometida
 export function otd_day_lines(sim) {
   const report = sim.outbound.otd_report();
-  const lines = [["Fecha de entrega prometida", "Pedidos", "A tiempo", "Tarde: perdió su corte", "Tarde: llegó después de lo prometido", "OTD %", "Unidades"]];
+  const lines = [["Fecha de entrega prometida", "Pedidos entregados", "A tiempo", "Tarde: perdió su corte", "Tarde: llegó después de lo prometido", "OTD %", "Unidades"]];
   report.days.forEach((row) => lines.push([row.date, row.orders, row.on_time, row.late_shipment, row.late_arrival, decimal_percent(row.otd), row.units]));
   const totals = report.totals;
   lines.push(["Total", totals.orders, totals.on_time, report.days.reduce((sum, row) => sum + row.late_shipment, 0), report.days.reduce((sum, row) => sum + row.late_arrival, 0), decimal_percent(totals.otd), report.days.reduce((sum, row) => sum + row.units, 0)]);
   lines.push([]);
   lines.push([`Pedidos que ya perdieron su corte y siguen sin salir al descargar: ${report.pending_late}`]);
-  lines.push(["OTD = pedidos a tiempo / pedidos entregados con promesa ese día. Un pedido es a tiempo si sale en el corte que le tocaba (regla de los 60 minutos) y llega al cliente antes de la hora prometida."]);
-  lines.push([`Promesa = hora de corte + viaje a 55 km/h + 1 hora de tolerancia. La llegada es la hora de salida + el viaje a la velocidad promedio de ese camión (entre 45 y 65 km/h). Semilla ${sim.seed}.`]);
+  lines.push(["OTD = pedidos entregados a tiempo / pedidos ya entregados con promesa ese día. Solo cuentan las entregas: un pedido despachado que todavía va en camino no cuenta ni a favor ni en contra. Un pedido es a tiempo si sale en el corte que le tocaba (regla de los 60 minutos) y llega al cliente antes de la hora prometida."]);
+  lines.push([`Promesa = hora de corte + viaje a 55 km/h + 1 hora de tolerancia. La llegada es la hora de salida + el viaje a la velocidad promedio de ese camión (entre 45 y 65 km/h).`]);
   return lines;
 }
 
 export function otd_order_lines(sim) {
   const report = sim.outbound.otd_report();
-  const lines = [["Pedido", "Ciudad", "Región", "Kilómetros", "Cajas", "Unidades", "Creado", "Corte prometido", "Salida real", "Camión", "Llegada prometida", "Llegada estimada", "Perdió su corte", "Llegó tarde", "A tiempo"]];
+  const lines = [["Pedido", "Ciudad", "Región", "Kilómetros", "Cajas", "Unidades", "Creado", "Corte prometido", "Salida real", "Camión", "Llegada prometida", "Llegada estimada", "Perdió su corte", "Llegó tarde", "A tiempo", "Estado"]];
   report.deliveries.forEach((delivery) =>
     lines.push([
       delivery.order_id,
@@ -74,6 +44,8 @@ export function otd_order_lines(sim) {
       delivery.late_shipment ? "Sí" : "No",
       delivery.late_arrival ? "Sí" : "No",
       delivery.on_time ? "Sí" : "No",
+      // Solo los entregados cuentan para el OTD; los que van en camino son una estimación
+      delivery.arrival_at <= sim.now ? "Entregado" : "En camino (no cuenta todavía)",
     ]),
   );
   return lines;
@@ -139,6 +111,8 @@ export function build_dispatch_panel(body, yard) {
       cutoff_list.append(item);
     });
     add_button.disabled = yard.cutoffs.length >= MAX_CUTOFFS;
+    // Con muchas horas la tarjeta ocupa todo el ancho para que no quede una columna larguísima
+    cutoffs_card.classList.toggle("is_wide", yard.cutoffs.length > 6);
   }
   add_button.addEventListener("click", () => {
     // El corte nuevo arranca una hora después del último (o a las 12 si ya estaba al final del día)
@@ -183,8 +157,9 @@ export function build_dispatch_panel(body, yard) {
     ["cutoffs", "Cortes cumplidos"],
     ["trucks", "Camiones que salieron"],
     ["orders", "Pedidos despachados"],
+    ["delivered", "Pedidos entregados al cliente"],
     ["late", "Envíos tardíos (perdieron su corte)"],
-    ["otd", "OTD (entrega a tiempo)"],
+    ["otd", "OTD (entregas a tiempo)"],
     ["pending_late", "Atrasados sin salir"],
   ].forEach(([key, label]) => {
     const wrapper = make("div", "inventory_total");
@@ -194,29 +169,45 @@ export function build_dispatch_panel(body, yard) {
     summary_cells[key] = value;
   });
 
-  // ---------- Descargas ----------
-  const toolbar = make("div", "table_toolbar");
-  toolbar.append(make("h3", "table_title", "Informe y Entrega a Tiempo (OTD)"));
-  const buttons = make("div", "download_buttons");
-  const add_download = (label, handler, primary = false) => {
-    const button = make("button", primary ? "text_button text_button_primary" : "text_button");
-    button.type = "button";
-    button.append(make("i", "fa-solid fa-file-arrow-down"), make("span", "", label));
-    button.firstChild.setAttribute("aria-hidden", "true");
-    button.addEventListener("click", handler);
-    buttons.append(button);
-  };
-  const stamp = () => (current_sim ? `semilla_${current_sim.seed}` : "corrida");
-  add_download("Descargar KPI OTD por día (CSV)", () => current_sim && download_csv(`otd_por_dia_${stamp()}.csv`, otd_day_lines(current_sim)), true);
-  add_download("Detalle por pedido (CSV)", () => current_sim && download_csv(`otd_detalle_pedidos_${stamp()}.csv`, otd_order_lines(current_sim)));
-  add_download("Informe de camiones (CSV)", () => {
-    if (!current_sim) return;
-    const lines = [["N.º", "Hora de corte", "Salida real", "Puerta", "Camión", "Destino", "Kilómetros", "Pedidos", "Pedidos tardíos", "Cajas", "Unidades"]];
-    current_sim.outbound.log.forEach((row) => lines.push([row.id, row.cutoff_text, row.departed_text, row.door, row.truck_id, row.destination, row.kilometers, row.orders, row.late_orders, row.boxes, row.units]));
-    download_csv(`informe_camiones_${stamp()}.csv`, lines);
-  });
-  toolbar.append(buttons);
+  // ---------- Informe de camiones y OTD ----------
+  const stamp = () => (current_sim ? current_sim.format_iso_date(current_sim.now) : "corrida");
+  const downloads = make_download_menu([
+    { label: "KPI OTD por día (CSV)", hint: "Pedidos a tiempo y tardíos por día de entrega prometida", run: () => current_sim && download_csv(`otd_por_dia_${stamp()}.csv`, otd_day_lines(current_sim)) },
+    { label: "Detalle por pedido (CSV)", hint: "Cada pedido con su corte, su salida y su llegada", run: () => current_sim && download_csv(`otd_detalle_pedidos_${stamp()}.csv`, otd_order_lines(current_sim)) },
+    {
+      label: "Informe de camiones (CSV)",
+      hint: "Cada camión de despacho que salió, con su destino y su carga",
+      run: () => {
+        if (!current_sim) return;
+        const lines = [["N.º", "Hora de corte", "Salida real", "Puerta", "Camión", "Destino", "Kilómetros", "Pedidos", "Pedidos tardíos", "Cajas", "Unidades"]];
+        current_sim.outbound.log.forEach((row) => lines.push([row.id, row.cutoff_text, row.departed_text, row.door, row.truck_id, row.destination, row.kilometers, row.orders, row.late_orders, row.boxes, row.units]));
+        download_csv(`informe_camiones_${stamp()}.csv`, lines);
+      },
+    },
+  ]);
 
+  // El OTD por día, en una tabla propia (el mismo cálculo del CSV)
+  const otd_scroll = make("div", "table_scroll table_scroll_short");
+  otd_scroll.tabIndex = 0;
+  otd_scroll.setAttribute("role", "region");
+  otd_scroll.setAttribute("aria-label", "Entrega a Tiempo (OTD) por día");
+  const otd_table = make("table", "data_table data_table_narrow");
+  const otd_head = make("thead");
+  const otd_head_row = make("tr");
+  ["Día de entrega prometida", "Entregados", "A tiempo", "Tarde por perder su corte", "Tarde por llegar después", "OTD", "Unidades"].forEach((text) => otd_head_row.append(make("th", "", text)));
+  otd_head.append(otd_head_row);
+  const otd_body = make("tbody");
+  otd_table.append(otd_head, otd_body);
+  otd_scroll.append(otd_table);
+
+  // El informe de cada camión que salió, con filtros
+  const filters = make_filter_bar([
+    { kind: "search", label: "Buscar camión", placeholder: "Ciudad, región o número" },
+    { kind: "select", label: "Mostrar", options: [["recent", `Los ${ROWS_SHOWN} más recientes`], ["all", "Todos los que salieron"]] },
+    { kind: "check", label: "Solo con pedidos tardíos" },
+  ]);
+  const rows_note = make("p", "note filter_count");
+  rows_note.setAttribute("role", "status");
   const scroll = make("div", "table_scroll");
   scroll.tabIndex = 0;
   scroll.setAttribute("role", "region");
@@ -229,42 +220,75 @@ export function build_dispatch_panel(body, yard) {
   const table_body = make("tbody");
   table.append(head, table_body);
   scroll.append(table);
-  body.append(summary, grid, toolbar, scroll);
+  const otd_title = make("h3", "table_title", "Entrega a Tiempo (OTD) por día");
+  body.append(summary, grid, make_table_header("Informe de camiones y Entrega a Tiempo (OTD)", downloads), otd_title, otd_scroll, make("h3", "table_title", "Camiones de despacho que salieron"), filters.bar, rows_note, scroll);
 
   render_cutoffs();
 
   let signature = "";
+  let last_log = [];
+  filters.on_change(() => {
+    signature = "";
+    render_rows(last_log);
+  });
   function render_rows(log) {
-    const next_signature = `${log.length}:${log.length ? log[log.length - 1].id : 0}`;
+    last_log = log;
+    const [query, mode, only_late] = filters.values();
+    const next_signature = `${log.length}:${log.length ? log[log.length - 1].id : 0}:${query}:${mode}:${only_late}`;
     if (next_signature === signature) return;
     signature = next_signature;
     table_body.replaceChildren();
-    if (log.length === 0) {
+    const matching = log.filter((entry) => matches_search(query, `${entry.destination} ${entry.id} ${entry.truck_id}`) && (!only_late || entry.late_orders > 0));
+    const shown = mode === "all" ? matching : matching.slice(-ROWS_SHOWN);
+    rows_note.textContent = log.length === 0 ? "" : `Mostrando ${shown.length} de ${log.length} camiones que salieron.`;
+    if (shown.length === 0) {
       const row = make("tr");
-      const cell = make("td", "placeholder", "Todavía no ha salido ningún camión de despacho.");
+      const cell = make("td", "placeholder", log.length === 0 ? "Todavía no ha salido ningún camión de despacho." : "Ningún camión cumple los filtros.");
       cell.colSpan = 9;
       row.append(cell);
       table_body.append(row);
       return;
     }
-    log
-      .slice(-ROWS_SHOWN)
-      .reverse()
-      .forEach((entry) => {
-        const row = make("tr");
-        row.append(
-          make("td", "", String(entry.id)),
-          make("td", "cell_arrival", entry.cutoff_text),
-          make("td", "", String(entry.door)),
-          make("td", "", String(entry.truck_id)),
-          make("td", "", entry.destination),
-          make("td", "", format_number(entry.orders)),
-          make("td", "", format_number(entry.late_orders)),
-          make("td", "", format_number(entry.boxes)),
-          make("td", "", format_number(entry.units)),
-        );
-        table_body.append(row);
-      });
+    [...shown].reverse().forEach((entry) => {
+      const row = make("tr");
+      row.append(
+        make("td", "", String(entry.id)),
+        make("td", "cell_arrival", entry.cutoff_text),
+        make("td", "", String(entry.door)),
+        make("td", "", String(entry.truck_id)),
+        make("td", "", entry.destination),
+        make("td", "", format_number(entry.orders)),
+        make("td", entry.late_orders > 0 ? "cell_late" : "", format_number(entry.late_orders)),
+        make("td", "", format_number(entry.boxes)),
+        make("td", "", format_number(entry.units)),
+      );
+      table_body.append(row);
+    });
+  }
+
+  let otd_signature = "";
+  function render_otd(sim) {
+    const delivered = sim.counters.orders_delivered;
+    if (String(delivered) === otd_signature) return;
+    otd_signature = String(delivered);
+    const report = sim.outbound.otd_report();
+    otd_body.replaceChildren();
+    if (report.days.length === 0) {
+      const row = make("tr");
+      const cell = make("td", "placeholder", "Todavía no hay entregas: el OTD aparece cuando llegan al cliente los primeros pedidos.");
+      cell.colSpan = 7;
+      row.append(cell);
+      otd_body.append(row);
+      return;
+    }
+    const add = (cells, class_name = "") => {
+      const row = make("tr", class_name);
+      cells.forEach((text) => row.append(make("td", "", text)));
+      otd_body.append(row);
+    };
+    report.days.forEach((day) => add([day.date, format_number(day.orders), format_number(day.on_time), format_number(day.late_shipment), format_number(day.late_arrival), day.otd === null ? "—" : format_percent(day.otd * 100), format_number(day.units)]));
+    const totals = report.totals;
+    add(["Total", format_number(totals.orders), format_number(totals.on_time), format_number(report.days.reduce((sum, day) => sum + day.late_shipment, 0)), format_number(report.days.reduce((sum, day) => sum + day.late_arrival, 0)), totals.otd === null ? "—" : format_percent(totals.otd * 100), format_number(report.days.reduce((sum, day) => sum + day.units, 0))], "total_row");
   }
 
   function set_text(element, text) {
@@ -275,7 +299,7 @@ export function build_dispatch_panel(body, yard) {
   return {
     // Se baja el KPI OTD de la corrida actual (lo usa el diálogo de reinicio)
     download_otd(sim) {
-      download_csv(`otd_por_dia_semilla_${sim.seed}.csv`, otd_day_lines(sim));
+      download_csv(`otd_por_dia_${sim.format_iso_date(sim.now)}.csv`, otd_day_lines(sim));
     },
     has_deliveries(sim) {
       return sim.outbound.deliveries.length > 0;
@@ -289,10 +313,11 @@ export function build_dispatch_panel(body, yard) {
       set_text(gate_state, blocked ? "Cerrada" : "Abierta");
 
       const { counters } = sim;
-      const report_otd = counters.orders_dispatched > 0 ? counters.orders_on_time / counters.orders_dispatched : null;
+      const report_otd = counters.orders_delivered > 0 ? counters.orders_on_time / counters.orders_delivered : null;
       set_text(summary_cells.cutoffs, format_number(counters.cutoffs_run));
       set_text(summary_cells.trucks, format_number(counters.trucks_dispatched));
       set_text(summary_cells.orders, format_number(counters.orders_dispatched));
+      set_text(summary_cells.delivered, format_number(counters.orders_delivered));
       set_text(summary_cells.late, format_number(counters.late_shipments));
       set_text(summary_cells.otd, report_otd === null ? "—" : format_percent(report_otd * 100));
       set_text(summary_cells.pending_late, format_number(sim.orders.orders.filter((order) => order.late).length));
@@ -311,6 +336,7 @@ export function build_dispatch_panel(body, yard) {
         if (pending.bins.length > 12) ready_list.append(make("li", "placeholder", `y ${pending.bins.length - 12} ciudades más`));
       }
       render_rows(sim.outbound.log);
+      render_otd(sim);
     },
   };
 }

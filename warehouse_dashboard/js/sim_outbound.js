@@ -1,12 +1,13 @@
 // Salida: cuando un pedido completa su casilla, un operario del muro la vacía en una cubeta que va por banda a empaque; una
 // estación la convierte en un paquete sellado que sigue por la banda de despacho hasta la pila de su destino. A cada hora de corte
 // salen camiones, uno por ciudad, con los paquetes de los pedidos a los que les tocaba ese corte; los que no estaban listos son
-// envíos tardíos y salen en el siguiente. Cada salida queda en el informe y cada entrega, en el registro de Entrega a Tiempo (OTD).
+// envíos tardíos y salen en el siguiente. Cada salida queda en el informe. El registro de Entrega a Tiempo (OTD) mide solo entregas:
+// un pedido cuenta (a tiempo o tarde) cuando su camión llega al cliente, no cuando sale.
 // La persona puede cerrar la entrada de camiones de despacho.
 
 import { Belt } from "./belts.js";
 import { DESTINATIONS, make_route } from "./catalog.js";
-import { DAY_SECONDS, day_index, day_start_time, next_cutoff_after } from "./cutoffs.js";
+import { day_index, day_start_time, next_cutoff_after } from "./cutoffs.js";
 import { DispatchBin, DispatchDoor, PackStation, Parcel, Tote, Truck, Worker } from "./entities.js";
 import { GATES, ROAD_SPAWN_X, dispatch_bin_slot } from "./layout.js";
 import { project_on_path } from "./path_tools.js";
@@ -14,7 +15,11 @@ import { project_on_path } from "./path_tools.js";
 const EMPTY_SLOT_SECONDS = 4;
 const TOTE_OUT_HEIGHT = 0.3;
 // Cuántos camiones recuerda el informe como máximo
-const DISPATCH_LOG_LIMIT = 600;
+// Cuántos camiones que salieron recuerda la simulación (informe y viajes del mapa) y cuántas entregas por pedido (para el detalle del
+// OTD). El OTD por día no depende de estos topes: se va sumando aparte.
+const DISPATCH_LOG_LIMIT = 20000;
+const TRIPS_LIMIT = 20000;
+const DELIVERIES_LIMIT = 60000;
 // Lo que tarda en cargarse un paquete al camión, y cada cuánto puede salir a la carretera un camión nuevo
 const LOAD_SECONDS = 0.6;
 const SPAWN_GAP_SECONDS = 8;
@@ -77,6 +82,14 @@ export class OutboundSystem {
     this.bins = DESTINATIONS.map((destination) => new DispatchBin(destination, dispatch_bin_slot(destination.index)));
     this.jobs = [];
     this.deliveries = [];
+    // El OTD sumado por día de entrega prometida, que no se pierde cuando el detalle por pedido llega a su tope
+    this.otd_days = new Map();
+    this.otd_totals = { orders: 0, on_time: 0 };
+    // Las entregas de pedidos que ya salieron y todavía no llegan al cliente, y cuándo llega la próxima
+    this.in_transit = [];
+    this.next_arrival_at = Infinity;
+    // Los viajes de los camiones que salieron, para el mapa: dónde van, cuánto llevan y cuándo llegan
+    this.trips = [];
     this.last_spawn_at = -Infinity;
     this.cutoff_event_id = null;
     this.cutoff_event_time = null;
@@ -254,6 +267,7 @@ export class OutboundSystem {
     this.record(door, truck, now);
     truck.cargo.forEach((parcel) => this.ship_parcel(parcel, now, truck));
     sim.counters.trucks_dispatched += 1;
+    this.record_trip(truck, now);
     truck.machine.go_to("DEPARTING", now);
     truck.docked = false;
     sim.emit({ type: "truck_departing", truck, empty: false });
@@ -283,6 +297,32 @@ export class OutboundSystem {
       },
     ]);
     truck.door_open = 0;
+  }
+
+  // El viaje de un camión que salió: a dónde va, a qué velocidad, qué lleva y cuándo llega al cliente. Las entregas de sus pedidos
+  // acaban de quedar registradas (son las últimas de la lista).
+  record_trip(truck, now) {
+    const delivered = this.deliveries.slice(this.deliveries.length - truck.cargo.length);
+    const products = new Map();
+    truck.cargo.forEach((parcel) => parcel.boxes.forEach((box) => products.set(box.sku_id, (products.get(box.sku_id) || 0) + 1)));
+    const { kilometers } = truck.destination;
+    this.trips.push({
+      id: this.log_count,
+      truck_id: truck.id,
+      destination: truck.destination,
+      kilometers,
+      departed_at: now,
+      speed_kmh: truck.speed_kmh,
+      arrival_at: now + (kilometers / truck.speed_kmh) * 3600,
+      cutoff_text: truck.cutoff_text,
+      orders: truck.cargo.length,
+      late_shipments: delivered.filter((delivery) => delivery.late_shipment).length,
+      late_arrivals: delivered.filter((delivery) => delivery.late_arrival).length,
+      boxes: delivered.reduce((sum, delivery) => sum + delivery.boxes, 0),
+      units: delivered.reduce((sum, delivery) => sum + delivery.units, 0),
+      products: [...products.entries()].map(([sku_id, boxes]) => ({ sku_id, boxes })).sort((first, second) => second.boxes - first.boxes),
+    });
+    if (this.trips.length > TRIPS_LIMIT) this.trips.shift();
   }
 
   // Un renglón del informe de despachos: un camión que salió en un corte
@@ -332,7 +372,7 @@ export class OutboundSystem {
     sim.counters.orders_dispatched += 1;
     sim.counters.cycle_time_total += now - order.created_at;
     sim.counters.cycle_count += 1;
-    sim.orders.orders = sim.orders.orders.filter((candidate) => candidate !== order);
+    sim.orders.remove_order(order);
     sim.finished_orders.push(order);
     sim.parcels = sim.parcels.filter((candidate) => candidate !== parcel);
     this.record_delivery(order, truck, now, parcel.boxes.length, units);
@@ -348,8 +388,7 @@ export class OutboundSystem {
     const late_shipment = order.late;
     const late_arrival = arrival_at > promised_at;
     const on_time = !late_shipment && !late_arrival;
-    if (on_time) sim.counters.orders_on_time += 1;
-    this.deliveries.push({
+    const delivery = {
       order_id: order.id,
       city: order.destination.city,
       region: order.destination.region,
@@ -365,28 +404,51 @@ export class OutboundSystem {
       late_shipment,
       late_arrival,
       on_time,
-    });
+    };
+    this.deliveries.push(delivery);
+    // Al pasar el tope se sueltan de un golpe las más viejas (no una por una, que cuesta mover todo el arreglo cada vez)
+    if (this.deliveries.length > DELIVERIES_LIMIT * 1.1) this.deliveries.splice(0, this.deliveries.length - DELIVERIES_LIMIT);
+    // Todavía no es una entrega: cuenta para el OTD cuando el camión llegue al cliente
+    this.in_transit.push(delivery);
+    this.next_arrival_at = Math.min(this.next_arrival_at, arrival_at);
   }
 
-  // El informe de Entrega a Tiempo por día de entrega prometida: { days, deliveries, pending_late, totals }
-  otd_report() {
+  // Los pedidos cuyo camión ya llegó al cliente pasan a contar: a tiempo o tarde, por día de entrega prometida
+  settle_arrivals(now) {
+    if (now < this.next_arrival_at) return;
     const { sim } = this;
-    const days = new Map();
-    this.deliveries.forEach((delivery) => {
-      const key = day_index(delivery.promised_at);
-      if (!days.has(key)) days.set(key, { key, orders: 0, on_time: 0, late_shipment: 0, late_arrival: 0, units: 0 });
-      const row = days.get(key);
+    let next = Infinity;
+    const waiting = [];
+    this.in_transit.forEach((delivery) => {
+      if (delivery.arrival_at > now) {
+        waiting.push(delivery);
+        next = Math.min(next, delivery.arrival_at);
+        return;
+      }
+      sim.counters.orders_delivered += 1;
+      if (delivery.on_time) sim.counters.orders_on_time += 1;
+      const day = day_index(delivery.promised_at);
+      if (!this.otd_days.has(day)) this.otd_days.set(day, { key: day, orders: 0, on_time: 0, late_shipment: 0, late_arrival: 0, units: 0 });
+      const row = this.otd_days.get(day);
       row.orders += 1;
       row.units += delivery.units;
       if (delivery.on_time) row.on_time += 1;
       else if (delivery.late_shipment) row.late_shipment += 1;
       else row.late_arrival += 1;
+      this.otd_totals.orders += 1;
+      if (delivery.on_time) this.otd_totals.on_time += 1;
     });
-    const rows = [...days.values()]
+    this.in_transit = waiting;
+    this.next_arrival_at = next;
+  }
+
+  // El informe de Entrega a Tiempo por día de entrega prometida: { days, deliveries, pending_late, totals }
+  otd_report() {
+    const { sim } = this;
+    const rows = [...this.otd_days.values()]
       .sort((first, second) => first.key - second.key)
       .map((row) => ({ ...row, date: sim.format_iso_date(day_start_time(row.key)), otd: row.orders > 0 ? row.on_time / row.orders : null }));
-    const total = this.deliveries.length;
-    const on_time = this.deliveries.filter((delivery) => delivery.on_time).length;
+    const { orders: total, on_time } = this.otd_totals;
     // Pedidos que ya perdieron su corte y todavía no salen: atrasados sin enviar
     const pending_late = sim.orders.orders.filter((order) => order.late).length;
     return { days: rows, deliveries: this.deliveries, pending_late, totals: { orders: total, on_time, otd: total > 0 ? on_time / total : null } };
@@ -589,6 +651,7 @@ export class OutboundSystem {
     this.step_operators(now);
     this.step_stations(now, dt);
     this.step_loading(now, dt);
+    this.settle_arrivals(now);
     this.operators.forEach((operator) => operator.update(dt, now));
     this.trucks.forEach((truck) => truck.update(dt, now));
   }

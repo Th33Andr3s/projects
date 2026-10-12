@@ -24,6 +24,19 @@ export function format_number(value) {
   return number_formatter.format(value);
 }
 
+// Dinero en pesos colombianos, exacto: 1250000 → "$ 1.250.000"
+export function format_currency(value) {
+  return `$ ${format_number(Math.round(value))}`;
+}
+
+// Dinero para las tarjetas, más corto: "$ 850.000", "$ 12,4 millones" y "$ 3,2 mil millones" (mil millones = 10^9)
+export function format_currency_compact(value) {
+  const amount = Math.round(value);
+  if (Math.abs(amount) < 1e6) return `$ ${format_number(amount)}`;
+  if (Math.abs(amount) < 1e9) return `$ ${format_number(Math.round(amount / 1e5) / 10)} millones`;
+  return `$ ${format_number(Math.round(amount / 1e8) / 10)} mil millones`;
+}
+
 export function format_percent(value) {
   return value === null || value === undefined ? "—" : `${Math.round(value)} %`;
 }

@@ -1,15 +1,16 @@
-// La sección "Patio de recibo y muelles": cuántos camiones llegan en cada franja, qué muelles se usan, qué categoría de mercancía
-// tiene prioridad, cómo va el parqueadero y la tabla de camiones programados con la restricción de cada uno (muelle fijo y
+// La sección "Patio de recibo y muelles": cuántos camiones llegan en cada franja, qué muelles se usan, cómo va el parqueadero y la tabla de camiones programados con la restricción de cada uno (muelle fijo y
 // franja desde la que puede entrar). Todo lo que se cambia aquí se guarda en la configuración del patio (yard_config.js).
 
 import { DOCK_COUNT } from "./config.js";
 import { CATEGORIES } from "./catalog.js";
 import { format_number } from "./format.js";
-import { PRIORITY_LEVELS, SLOTS, MAX_TRUCKS_PER_SLOT, slot_label } from "./yard_config.js";
+import { SLOTS, MAX_TRUCKS_PER_SLOT, slot_label } from "./yard_config.js";
 import { DAY_SECONDS, MAX_MANUAL_TRUCKS } from "./truck_schedule.js";
+import { make_filter_bar, matches_search } from "./table_tools.js";
 
-// Cuántos camiones terminados se siguen mostrando en el filtro de terminados
+// Cuántos camiones terminados se siguen mostrando en el filtro de terminados, y cuántas decisiones del coordinador
 const FINISHED_SHOWN = 30;
+const COORDINATOR_LOG_SHOWN = 8;
 
 function make(tag, class_name, text) {
   const element = document.createElement(tag);
@@ -77,29 +78,47 @@ export function build_yard_panel(body, yard, handlers) {
     dock_grid.append(button);
     return { button, state };
   });
-  docks_card.append(dock_grid, make("p", "note", "Pulsa un muelle para bloquearlo o habilitarlo. Un camión que ya está en un muelle que se bloquea termina de descargar."));
-
-  // ---------- Prioridad ----------
-  const priority_card = make_card("Prioridad de mercancía");
-  const priority_list = make("div", "priority_list");
-  const priority_selects = CATEGORIES.map((category, index) => {
-    const label = make("label", "priority_field");
-    const swatch = make("span", "swatch");
-    swatch.style.background = category.color;
-    const select = make_select(PRIORITY_LEVELS.map((level) => [String(level.value), level.label]), `Prioridad de ${category.name}`);
-    select.value = String(yard.get_priority(index));
-    select.addEventListener("change", () => yard.set_priority(index, select.value));
-    label.append(swatch, make("span", "priority_name", category.name), select);
-    priority_list.append(label);
-    return select;
-  });
-  priority_card.append(priority_list, make("p", "note", "Una categoría con prioridad trae más camiones, y sus camiones pasan primero al muelle que se desocupe."));
+  // Dos interruptores generales: cerrar todos los muelles, y detener la llegada de camiones hasta nueva orden
+  const dock_actions = make("div", "dock_actions");
+  const close_docks_button = make("button", "text_button text_button_small");
+  close_docks_button.type = "button";
+  const close_docks_icon = make("i", "fa-solid fa-lock");
+  close_docks_icon.setAttribute("aria-hidden", "true");
+  const close_docks_label = make("span");
+  close_docks_button.append(close_docks_icon, close_docks_label);
+  close_docks_button.addEventListener("click", () => yard.set_all_docks_blocked(!yard.all_docks_blocked));
+  const stop_arrivals_button = make("button", "text_button text_button_small");
+  stop_arrivals_button.type = "button";
+  const stop_arrivals_icon = make("i", "fa-solid fa-ban");
+  stop_arrivals_icon.setAttribute("aria-hidden", "true");
+  const stop_arrivals_label = make("span");
+  stop_arrivals_button.append(stop_arrivals_icon, stop_arrivals_label);
+  stop_arrivals_button.addEventListener("click", () => yard.set_arrivals_blocked(!yard.arrivals_blocked));
+  dock_actions.append(close_docks_button, stop_arrivals_button);
+  const dock_status = make("p", "dock_status");
+  dock_status.setAttribute("role", "status");
+  docks_card.append(
+    dock_actions,
+    dock_status,
+    dock_grid,
+    make("p", "note", "Pulsa un muelle para bloquearlo o habilitarlo. Un camión que ya está en un muelle que se bloquea termina de descargar. Con las llegadas detenidas, los camiones programados no salen a la carretera (no llegan de golpe al reanudar) y el coordinador no pide ninguno; los que ya venían siguen su camino."),
+  );
 
   // ---------- Parqueadero ----------
   const parking_card = make_card("Parqueadero de camiones");
   const parking_summary = make("p", "parking_summary");
   const parking_list = make("ol", "parking_list");
   parking_card.append(parking_summary, parking_list, make("p", "note", "Si todos los muelles están ocupados, los camiones se parquean en orden; cada vez que se libera un muelle pasa el que le toque."));
+
+  // ---------- Coordinador de recibo ----------
+  const coordinator_card = make_card("Coordinador de recibo");
+  const coordinator_summary = make("p", "coordinator_summary");
+  const coordinator_log = make("ol", "coordinator_log");
+  coordinator_card.append(
+    coordinator_summary,
+    coordinator_log,
+    make("p", "note", "Pide camiones de un producto cuando va a faltar, según los pedidos de clientes de las últimas horas y lo que ya viene en camino. Si lo que hay se acaba antes de que llegue ayuda, el camión es urgente y llega en una hora. Con el e-commerce apagado no pide nada. Se ajusta en Parámetros."),
+  );
 
   // ---------- Llegada inmediata ----------
   const now_card = make_card("Hacer llegar camiones ahora");
@@ -121,6 +140,7 @@ export function build_yard_panel(body, yard, handlers) {
   now_form.append(now_label, now_button);
   now_form.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (yard.arrivals_blocked) return;
     const count = Math.round(Number(now_input.value));
     if (!Number.isFinite(count) || count < 1) {
       now_input.focus();
@@ -131,13 +151,13 @@ export function build_yard_panel(body, yard, handlers) {
   now_card.append(now_form, make("p", "note", "Salen a la carretera uno tras otro, además de los programados por franja."));
 
   const grid = make("div", "yard_grid");
-  grid.append(now_card, counts_card, docks_card, priority_card, parking_card);
+  grid.append(now_card, counts_card, docks_card, coordinator_card, parking_card);
 
   // ---------- Camiones programados ----------
   const table_title = make("h3", "table_title", "Camiones programados");
   const toolbar = make("div", "table_toolbar");
-  const filter_label = make("label", "table_filter");
-  filter_label.append("Mostrar ");
+  const filter_label = make("label", "filter_field filter_select");
+  filter_label.append(make("span", "filter_label", "Mostrar"));
   const filter_select = make_select(
     [
       ["pending", "Pendientes y en el patio"],
@@ -148,7 +168,15 @@ export function build_yard_panel(body, yard, handlers) {
     "Qué camiones mostrar",
   );
   filter_label.append(filter_select);
-  toolbar.append(filter_label, make("p", "note", "A cada camión le puedes fijar un muelle y la franja desde la que puede entrar a él; mientras tanto espera parqueado."));
+  // Además del día, se puede buscar un camión y quedarse con los que están en un estado
+  const extra_filters = make_filter_bar([
+    { kind: "search", label: "Buscar camión", placeholder: "Número, ruta o mercancía" },
+    { kind: "select", label: "Estado", options: [["", "Todos"], ["scheduled", "Programados"], ["road", "En camino"], ["yard", "En el patio o en un muelle"]] },
+  ]);
+  toolbar.append(filter_label, extra_filters.bar);
+  const table_note = make("p", "note", "A cada camión le puedes fijar un muelle y la franja desde la que puede entrar a él; mientras tanto espera parqueado.");
+  const count_note = make("p", "note filter_count");
+  count_note.setAttribute("role", "status");
   const wrapper = make("div", "table_scroll");
   wrapper.tabIndex = 0;
   wrapper.setAttribute("role", "region");
@@ -161,7 +189,7 @@ export function build_yard_panel(body, yard, handlers) {
   const table_body = make("tbody");
   table.append(head, table_body);
   wrapper.append(table);
-  body.append(grid, table_title, toolbar, wrapper);
+  body.append(grid, table_title, toolbar, table_note, count_note, wrapper);
 
   // ---------- Filas ----------
   const rows = new Map();
@@ -173,20 +201,35 @@ export function build_yard_panel(body, yard, handlers) {
   filter_select.addEventListener("change", () => {
     force_rebuild = true;
   });
+  extra_filters.on_change(() => {
+    force_rebuild = true;
+  });
+
+  // Dónde está un camión: programado (todavía no sale), en la carretera o ya dentro del predio
+  function truck_place(entry) {
+    if (!entry.spawned) return "scheduled";
+    return !entry.truck || entry.truck.on_road ? "road" : "yard";
+  }
 
   function visible_entries(sim) {
     const day = Math.floor(sim.now / DAY_SECONDS) + 1;
     const entries = sim.receiving.schedule.entries;
+    let by_day;
     switch (filter_select.value) {
       case "today":
-        return entries.filter((entry) => entry.day === day);
+        by_day = entries.filter((entry) => entry.day === day);
+        break;
       case "tomorrow":
-        return entries.filter((entry) => entry.day === day + 1);
+        by_day = entries.filter((entry) => entry.day === day + 1);
+        break;
       case "finished":
-        return entries.filter((entry) => entry.finished).slice(-FINISHED_SHOWN);
+        by_day = entries.filter((entry) => entry.finished).slice(-FINISHED_SHOWN);
+        break;
       default:
-        return entries.filter((entry) => !entry.finished);
+        by_day = entries.filter((entry) => !entry.finished);
     }
+    const [query, place] = extra_filters.values();
+    return by_day.filter((entry) => (place === "" || truck_place(entry) === place) && matches_search(query, `${entry.id} ${entry.route.text} ${CATEGORIES[entry.category_index].name} ${slot_label(entry.slot)}`));
   }
 
   function make_row(entry) {
@@ -252,6 +295,7 @@ export function build_yard_panel(body, yard, handlers) {
         table_body.append(empty);
       }
     }
+    set_text(count_note, `Mostrando ${entries.length} camiones.`);
     entries.forEach((entry) => {
       const made = rows.get(entry.id);
       if (!made) return;
@@ -267,9 +311,6 @@ export function build_yard_panel(body, yard, handlers) {
       slot_fields.querySelectorAll("input").forEach((input) => {
         if (document.activeElement !== input) input.value = String(yard.get_count(input.dataset.slot));
       });
-      priority_selects.forEach((select, index) => {
-        if (document.activeElement !== select) select.value = String(yard.get_priority(index));
-      });
       sim.receiving.docks.forEach((dock, index) => {
         const { button, state } = dock_buttons[index];
         const blocked = yard.is_dock_blocked(index);
@@ -279,6 +320,21 @@ export function build_yard_panel(body, yard, handlers) {
         const text = blocked ? (dock.truck ? `Bloqueado · camión ${dock.truck.id}` : "Bloqueado") : dock.truck ? `Camión ${dock.truck.id}` : "Libre";
         set_text(state, text);
       });
+      const all_closed = yard.all_docks_blocked;
+      set_text(close_docks_label, all_closed ? "Abrir todos los muelles" : "Cerrar todos los muelles");
+      close_docks_icon.className = `fa-solid ${all_closed ? "fa-lock-open" : "fa-lock"}`;
+      close_docks_button.setAttribute("aria-pressed", String(all_closed));
+      const stopped = yard.arrivals_blocked;
+      set_text(stop_arrivals_label, stopped ? "Reanudar llegada de camiones" : "Detener llegada de camiones");
+      stop_arrivals_icon.className = `fa-solid ${stopped ? "fa-play" : "fa-ban"}`;
+      stop_arrivals_button.setAttribute("aria-pressed", String(stopped));
+      stop_arrivals_button.classList.toggle("text_button_danger", stopped);
+      now_button.disabled = stopped;
+      const status_parts = [];
+      if (all_closed) status_parts.push("Todos los muelles están cerrados: los camiones esperan parqueados.");
+      if (stopped) status_parts.push("Llegadas detenidas: no llega ningún camión hasta que las reanudes.");
+      set_text(dock_status, status_parts.join(" "));
+      dock_status.hidden = status_parts.length === 0;
       const parked = sim.receiving.bays.filter((bay) => bay.truck);
       set_text(parking_summary, `Plazas ocupadas: ${parked.length} de ${sim.receiving.bays.length}`);
       const parked_signature = parked.map((bay) => `${bay.number}:${bay.truck.id}`).join(",");
@@ -290,6 +346,16 @@ export function build_yard_panel(body, yard, handlers) {
           item.value = bay.number;
           parking_list.append(item);
         });
+      }
+      const requested = sim.coordinator;
+      const in_flight = sim.receiving.schedule.entries.filter((entry) => entry.coordinated && !entry.finished).length;
+      set_text(coordinator_summary, `Pidió ${format_number(requested.requested_trucks)} ${requested.requested_trucks === 1 ? "camión" : "camiones"} (${format_number(requested.requested_urgent)} urgentes). En camino ahora: ${format_number(in_flight)}.`);
+      const log_signature = requested.log.length > 0 ? `${requested.log.length}:${requested.log[0].time}:${requested.log[0].truck_id}` : "";
+      if (coordinator_log.dataset.signature !== log_signature) {
+        coordinator_log.dataset.signature = log_signature;
+        coordinator_log.replaceChildren();
+        requested.log.slice(0, COORDINATOR_LOG_SHOWN).forEach((item) => coordinator_log.append(make("li", item.urgent ? "is_urgent" : "", item.text)));
+        if (requested.log.length === 0) coordinator_log.append(make("li", "placeholder", "Todavía no pidió ningún camión."));
       }
       update_rows(sim);
     },

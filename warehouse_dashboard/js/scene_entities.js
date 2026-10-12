@@ -6,9 +6,11 @@
 // sea continuo aunque la simulación avance en pasos de 0,25 s.
 
 import { PartCollector } from "./geometry_parts.js";
-import { sku_color } from "./catalog.js";
+import { SKUS, sku_color } from "./catalog.js";
 import { lerp_angle } from "./path_tools.js";
-import { ACTIVE, COMPOUND, TRUCK } from "./layout.js";
+import { ACTIVE, COMPOUND, TRUCK, floor_y } from "./layout.js";
+import { slot_position, visible_slots } from "./active_layout.js";
+import { staging_grid } from "./layout.js";
 
 // Una caja dentro de una casilla del muro se dibuja un poco más chica que en una banda
 const SLOT_BOX_SCALE = 0.76;
@@ -17,18 +19,20 @@ const TRUCK_TRAILER_COLOR = "#ffffff";
 const TRUCK_NUMBER_COLOR = "#0b3b66";
 const DIGIT_CAPACITY = 400;
 const BARRIER_CAPACITY = 4;
-// Estados en que una caja se dibuja por sí sola; en un pallet, una cubeta o un camión la dibuja su contenedor
-const BOX_VISIBLE_STATES = new Set(["ON_RAIL", "IN_ACTIVE", "PICKED", "ON_FLOOR_BELT", "ON_MAIN_BELT", "IN_WALL_SLOT"]);
-const POOLS = { boxes: 2600, pallets: 560, totes: 180, parcels: 220, trucks: 60, forklifts: 24, workers: 90, slots: 130, stacks: 24, dispatch_bins: 32, markers: 24, flashes: 28, leds: 32 };
+// Estados en que una caja se dibuja por sí sola; en un pallet, una cubeta o un camión la dibuja su contenedor. Las del activo no
+// se dibujan una por una: cada estante muestra casillas llenas según lo que tiene (ver sync_active).
+const BOX_VISIBLE_STATES = new Set(["ON_RAIL", "PICKED", "ON_FLOOR_BELT", "ON_MAIN_BELT", "IN_WALL_SLOT"]);
+// active_boxes: las casillas de estante del activo (8 pisos, hasta 240 por piso); pallets: los 1.040 de la reserva y los que se arman
+const POOLS = { boxes: 2600, active_boxes: 2600, pallets: 1500, totes: 180, parcels: 220, trucks: 60, forklifts: 34, workers: 2000, slots: 130, stacks: 24, dispatch_bins: 32, markers: 24, flashes: 28, leds: 32 };
 // Lo que solo adorna no se elige con el puntero
 const NOT_PICKABLE = new Set(["wheels", "beacons", "markers", "leds", "flashes", "forks", "truck_doors", "truck_digits"]);
 const MAX_LABELS = 1;
-// Las pilas de la bodega de recibo: tamaño en planta, cajas por piso y alto de cada piso, en metros
-const STACK_WIDTH = 3.4;
-const STACK_DEPTH = 2.2;
-const BOXES_PER_STACK_LAYER = 24;
-const STACK_LAYER_HEIGHT = 0.4;
+// Las pilas de la bodega de stock: el tamaño en planta lo da la cuadrícula del plano (más chicas si hay muchos productos). El alto
+// crece con la raíz de la cantidad de cajas, así una pila con pocas se ve y una con muchísimas no sale del techo; la pila llena es
+// la de una cuarta parte de la capacidad.
+const STACK_BASE_HEIGHT = 0.25;
 const STACK_MAX_HEIGHT = 5;
+const STACK_FULL_SHARE = 0.25;
 // Los pallets de descarga llevan cajas de varios productos: un tono de cartón
 const MIXED_PALLET_COLOR = "#c9a468";
 // Qué tan rápido sigue la altura dibujada de una pila a la real (por segundo): las pilas suben y bajan sin saltos ni parpadeos
@@ -131,7 +135,7 @@ export function build_entity_layer(THREE, scene, layout) {
   truck_door_parts.add_box(0, 1.2, -1.25, 0.08, 2.4, 2.5, TRUCK_TRAILER_COLOR);
   const truck_door_geometry = truck_door_parts.build();
 
-  // Dos flotas con dos colores: las de muelle a stock son naranja y las de stock a racks y multinivel, azules
+  // Tres flotas con tres colores: las de muelle a stock son naranja, las de stock a reserva, azules y las de reserva a activo, verdes
   function build_forklift_body(body_color, counterweight_color) {
     const forklift_body_parts = new PartCollector(THREE);
     forklift_body_parts.add_box(-0.25, 0.55, 0, 1.6, 0.6, 1.1, body_color);
@@ -144,6 +148,7 @@ export function build_entity_layer(THREE, scene, layout) {
   }
   const forklift_body_geometry = build_forklift_body("#f59e0b", "#d97706");
   const forklift_stock_body_geometry = build_forklift_body("#3b82f6", "#1d4ed8");
+  const forklift_replen_body_geometry = build_forklift_body("#22c55e", "#15803d");
 
   const fork_parts = new PartCollector(THREE);
   [-0.3, 0.3].forEach((z) => fork_parts.add_box(1.3, 0.06, z, 1.4, 0.08, 0.14, "#9ca3af"));
@@ -175,6 +180,7 @@ export function build_entity_layer(THREE, scene, layout) {
   const basic = (options) => new THREE.MeshBasicMaterial(options);
 
   add_pool("boxes", unit_box, instance_material(), POOLS.boxes);
+  add_pool("active_boxes", unit_box, instance_material(), POOLS.active_boxes);
   add_pool("pallet_bases", pallet_base_geometry, instance_material({ color: "#b99b6b" }), POOLS.pallets);
   add_pool("pallet_loads", unit_box, instance_material(), POOLS.pallets);
   add_pool("tote_bodies", unit_box, instance_material(), POOLS.totes);
@@ -186,6 +192,7 @@ export function build_entity_layer(THREE, scene, layout) {
   add_pool("barrier_arms", barrier_geometry, vertex_material, BARRIER_CAPACITY);
   add_pool("forklift_bodies", forklift_body_geometry, vertex_material, POOLS.forklifts, true);
   add_pool("forklift_stock_bodies", forklift_stock_body_geometry, vertex_material, POOLS.forklifts, true);
+  add_pool("forklift_replen_bodies", forklift_replen_body_geometry, vertex_material, POOLS.forklifts, true);
   add_pool("forks", fork_geometry, vertex_material, POOLS.forklifts);
   add_pool("wheels", wheel_geometry, instance_material({ color: "#111827" }), POOLS.forklifts * 4);
   add_pool("beacons", beacon_geometry, basic({ color: "#ffffff" }), POOLS.forklifts);
@@ -468,6 +475,30 @@ export function build_entity_layer(THREE, scene, layout) {
     pool.end();
   }
 
+  // El activo: cada tramo (producto en un piso) dibuja tantas casillas llenas como le toquen según lo que tiene guardado. Es una
+  // representación: con miles de cajas por piso no se dibuja una por una, solo cuánto está lleno cada estante.
+  function sync_active(sim) {
+    const pool = pools.active_boxes;
+    pool.begin();
+    for (const segment of sim.storage.segments) {
+      const count = segment.boxes.length;
+      if (count === 0) continue;
+      if (!segment.slot_spots) segment.slot_spots = [];
+      const [length, height, depth] = SKUS[segment.sku_id].size;
+      const hex = sku_color(segment.sku_id);
+      const shown = visible_slots(segment, count, sim.storage.capacity_of(segment));
+      for (let slot = 0; slot < shown; slot += 1) {
+        let spot_at = segment.slot_spots[slot];
+        if (!spot_at) {
+          spot_at = slot_position(segment, slot);
+          segment.slot_spots[slot] = spot_at;
+        }
+        put(pool, segment.shelf, spot_at.x, spot_at.y + height / 2, spot_at.z, 0, length, height, depth, hex);
+      }
+    }
+    pool.end();
+  }
+
   function sync_pallets(sim) {
     const bases = pools.pallet_bases;
     const loads = pools.pallet_loads;
@@ -576,18 +607,20 @@ export function build_entity_layer(THREE, scene, layout) {
   function sync_forklifts(sim, time, view) {
     const bodies = pools.forklift_bodies;
     const stock_bodies = pools.forklift_stock_bodies;
+    const replen_bodies = pools.forklift_replen_bodies;
     const forks = pools.forks;
     const wheels = pools.wheels;
     const beacons = pools.beacons;
     bodies.begin();
     stock_bodies.begin();
+    replen_bodies.begin();
     forks.begin();
     wheels.begin();
     beacons.begin();
     for (const forklift of sim.forklifts) {
       const p = place(forklift);
       vehicle_matrix(matrix_a, p.x, 0, p.z, p.yaw);
-      put_matrix(forklift.fleet === "dock" ? bodies : stock_bodies, forklift, matrix_a);
+      put_matrix(forklift.fleet === "dock" ? bodies : forklift.fleet === "stock" ? stock_bodies : replen_bodies, forklift, matrix_a);
       matrix_b.makeTranslation(0, forklift.fork_height, 0);
       matrix_b.premultiply(matrix_a);
       put_matrix(forks, forklift, matrix_b);
@@ -608,6 +641,7 @@ export function build_entity_layer(THREE, scene, layout) {
     }
     bodies.end();
     stock_bodies.end();
+    replen_bodies.end();
     forks.end();
     wheels.end();
     beacons.end();
@@ -631,9 +665,9 @@ export function build_entity_layer(THREE, scene, layout) {
     heads.end();
   }
 
-  // La bodega de recibo: una pila por producto, tan alta como la cantidad de cajas (un piso cada 24 cajas), del color del producto. La
-  // altura dibujada va alcanzando a la real poco a poco: una pila que recibe y entrega cajas seguidas no aparece y desaparece a cada
-  // rato (eso se veía como un parpadeo).
+  // La bodega de stock: una pila por producto, tan alta como la cantidad de cajas, del color del producto. La altura dibujada va
+  // alcanzando a la real poco a poco: una pila que recibe y entrega cajas seguidas no aparece y desaparece a cada rato (eso se veía
+  // como un parpadeo).
   let last_stack_time = 0;
   function sync_stock_stacks(sim, time) {
     const pool = pools.stock_stacks;
@@ -641,12 +675,14 @@ export function build_entity_layer(THREE, scene, layout) {
     last_stack_time = time;
     const blend = 1 - Math.exp(-STACK_EASE_RATE * dt);
     pool.begin();
+    const full_pile = Math.max(1, sim.config.get("staging_capacity") * STACK_FULL_SHARE);
+    const pile = staging_grid();
     sim.receiving.stacks.forEach((stack) => {
-      const target = stack.boxes > 0 ? Math.min(STACK_MAX_HEIGHT, Math.max(STACK_LAYER_HEIGHT, Math.ceil(stack.boxes / BOXES_PER_STACK_LAYER) * STACK_LAYER_HEIGHT)) : 0;
+      const target = stack.boxes > 0 ? Math.min(STACK_MAX_HEIGHT, STACK_BASE_HEIGHT + (STACK_MAX_HEIGHT - STACK_BASE_HEIGHT) * Math.sqrt(stack.boxes / full_pile)) : 0;
       stack.shown_height = stack.shown_height === undefined ? target : stack.shown_height + (target - stack.shown_height) * blend;
       if (Math.abs(target - stack.shown_height) < 0.01) stack.shown_height = target;
       if (stack.shown_height < STACK_MIN_VISIBLE) return;
-      put(pool, stack, stack.x, stack.shown_height / 2 + 0.05, stack.z, 0, STACK_WIDTH, stack.shown_height, STACK_DEPTH, sku_color(stack.sku_id));
+      put(pool, stack, stack.x, stack.shown_height / 2 + 0.05, stack.z, 0, pile.pile_width, stack.shown_height, pile.pile_depth, sku_color(stack.sku_id));
     });
     pool.end();
   }
@@ -759,16 +795,16 @@ export function build_entity_layer(THREE, scene, layout) {
     icon_list = [];
     sim.alerts.forEach((alert) => {
       if (alert.key === "wall_jam" && sim.orders.jam_box) icon_list.push({ kind: "danger", entity: sim.orders.jam_box, height: 1.4 });
-      else if (alert.key === "reserve_full") icon_list.push({ kind: "warn", point: { x: -26, y: 7.5, z: -10 } });
+      else if (alert.key === "reserve_full") icon_list.push({ kind: "warn", point: { x: -26, y: 17, z: -10 } });
       else if (alert.key.startsWith("blocked_")) {
         const order = sim.orders.orders.find((candidate) => candidate.id === alert.order_id);
         if (order && order.slot) icon_list.push({ kind: "danger", entity: order.slot, height: 1.7 });
         else if (order) {
           const line = order.lines.find((candidate) => candidate.box);
           if (line) icon_list.push({ kind: "danger", entity: line.box, height: 1.4 });
-          else icon_list.push({ kind: "danger", point: { x: ACTIVE.x0 + 14, y: 14.5, z: ACTIVE.belt_z } });
+          else icon_list.push({ kind: "danger", point: { x: ACTIVE.x0 + 14, y: floor_y(ACTIVE.floors - 1) + 4, z: ACTIVE.belt_z } });
         }
-      } else if (alert.key.startsWith("no_stock_")) icon_list.push({ kind: "warn", point: { x: ACTIVE.x0 + 14, y: 14.5, z: ACTIVE.z0 - 1 } });
+      } else if (alert.key.startsWith("no_stock_")) icon_list.push({ kind: "warn", point: { x: ACTIVE.x0 + 14, y: floor_y(ACTIVE.floors - 1) + 4, z: ACTIVE.z0 - 1 } });
     });
     if (sim.disruptions.is_active("belt_down")) icon_list.push({ kind: "danger", point: { x: 30, y: 2.6, z: -20.5 } });
     sim.forklifts.forEach((forklift) => {
@@ -868,6 +904,7 @@ export function build_entity_layer(THREE, scene, layout) {
     pack_station: [3.4, 1.8, 2.2],
     gate_lane: [1.4, 2.6, 4.8],
     stock_stack: [3.8, 2.2, 2.6],
+    active_shelf: [2.4, 1.3, 1.2],
     dispatch_bin: [3.6, 2.2, 3.6],
   };
   const static_target = { x: 0, y: 0, z: 0, prev_x: 0, prev_y: 0, prev_z: 0, yaw: 0, prev_yaw: 0 };
@@ -990,6 +1027,7 @@ export function build_entity_layer(THREE, scene, layout) {
     sync(sim, step_alpha, view, time) {
       alpha = step_alpha;
       sync_boxes(sim);
+      sync_active(sim);
       sync_pallets(sim);
       sync_totes(sim);
       sync_parcels(sim);

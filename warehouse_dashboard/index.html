@@ -7,6 +7,9 @@
   <meta name="description" content="Simulador 3D isométrico de un centro de distribución: patio de recibo con parqueadero y 10 muelles, inventario, reserva, multinivel activo, pedidos, empaque y despacho.">
   <link rel="icon" href="./assets/icons/favicon.ico" sizes="any">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="./css/styles.css">
   <script type="importmap">
   {
@@ -62,9 +65,7 @@
           </p>
         </div>
 
-        <div class="top_group" role="group" aria-label="Semilla">
-          <label class="seed_label" for="seed_input">Semilla</label>
-          <input id="seed_input" class="seed_input" type="number" inputmode="numeric" min="0" max="4294967295" step="1" value="2026">
+        <div class="top_group" role="group" aria-label="Reiniciar">
           <button id="reset_button" class="text_button" type="button">
             <i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i>
             <span>Reiniciar</span>
@@ -99,6 +100,12 @@
           </button>
           <button id="shortcuts_button" class="icon_button" type="button" aria-label="Atajos de teclado (?)">
             <i class="fa-regular fa-keyboard" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="top_group" role="group" aria-label="E-commerce">
+          <button id="ecommerce_button" class="text_button" type="button" aria-pressed="false">
+            <i class="fa-solid fa-cart-shopping" aria-hidden="true"></i>
+            <span>E-commerce apagado</span>
           </button>
         </div>
         <form id="send_trucks_form" class="top_group send_trucks" aria-label="Hacer llegar camiones ahora">
@@ -140,23 +147,27 @@
       <p id="fps_badge" class="fps_badge" hidden></p>
       <p id="scene_hint" class="scene_hint" role="status" hidden>Para acercar con la rueda del mouse, mantén Ctrl. Con la rueda sola, la página baja.</p>
 
-      <a id="scroll_button" class="scroll_button" href="#yard_section">
+      <a id="scroll_button" class="scroll_button" href="#params_section">
         <span>Configuración</span>
         <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
       </a>
       <p id="live_status" class="visually_hidden" role="status"></p>
     </div>
 
-    <!-- Barra de secciones: se queda arriba mientras se baja -->
+    <!-- Navegación: barra lateral fija en escritorio; en pantallas angostas, una barra arriba que se desplaza de lado -->
     <nav id="section_nav" class="section_nav" aria-label="Secciones">
-      <a class="nav_link nav_link_scene" href="#hero"><i class="fa-solid fa-warehouse" aria-hidden="true"></i><span>Bodega</span></a>
-      <a class="nav_link" href="#yard_section">Patio y muelles</a>
-      <a class="nav_link" href="#inventory_section">Inventario</a>
-      <a class="nav_link" href="#dispatch_section">Despachos</a>
-      <a class="nav_link" href="#params_section">Parámetros</a>
-      <a class="nav_link" href="#kpis_section">Indicadores</a>
-      <a class="nav_link" href="#inspector_section">Inspección</a>
-      <a class="nav_link" href="#disruptions_section">Disrupciones</a>
+      <p class="nav_brand"><i class="fa-solid fa-warehouse" aria-hidden="true"></i><span>Centro de distribución</span></p>
+      <a class="nav_link nav_link_scene" href="#hero"><i class="fa-solid fa-cube" aria-hidden="true"></i><span>Bodega</span></a>
+      <a class="nav_link" href="#params_section"><i class="fa-solid fa-sliders" aria-hidden="true"></i><span>Parámetros</span></a>
+      <a class="nav_link" href="#yard_section"><i class="fa-solid fa-truck-ramp-box" aria-hidden="true"></i><span>Patio y muelles</span></a>
+      <a class="nav_link" href="#inventory_section"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i><span>Inventario</span></a>
+      <a class="nav_link" href="#economy_section"><i class="fa-solid fa-sack-dollar" aria-hidden="true"></i><span>Economía</span></a>
+      <a class="nav_link" href="#catalog_section"><i class="fa-solid fa-tags" aria-hidden="true"></i><span>Mercancía</span></a>
+      <a class="nav_link" href="#dispatch_section"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i><span>Despachos</span></a>
+      <a class="nav_link" href="#map_section"><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i><span>Mapa</span></a>
+      <a class="nav_link" href="#kpis_section"><i class="fa-solid fa-chart-column" aria-hidden="true"></i><span>Indicadores</span></a>
+      <a class="nav_link" href="#inspector_section"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Inspección</span></a>
+      <a class="nav_link" href="#disruptions_section"><i class="fa-solid fa-bolt" aria-hidden="true"></i><span>Disrupciones</span></a>
       <span class="nav_status">
         <button id="nav_play_button" class="icon_button" type="button" aria-label="Pausar">
           <i class="fa-solid fa-pause" aria-hidden="true"></i>
@@ -167,31 +178,6 @@
     </nav>
 
     <div class="page_sections">
-      <section id="yard_section" class="page_section" aria-labelledby="yard_title">
-        <h2 id="yard_title">Patio de recibo y muelles</h2>
-        <p class="section_intro">Cuántos camiones llegan, qué muelles se usan, qué mercancía tiene prioridad y las restricciones de cada camión. Lo que cambies en los camiones por franja vale para las franjas que todavía no han empezado.</p>
-        <div id="yard_body"></div>
-      </section>
-
-      <section id="inventory_section" class="page_section" aria-labelledby="inventory_title">
-        <h2 id="inventory_title">Inventario</h2>
-        <p class="section_intro">Empieza en cero: cada caja se anota cuando un camión la suelta en el riel y se descuenta cuando sale en un camión de despacho. Arriba, la mercancía total del centro de distribución, cuánta hay en cada lugar y cuánto cabe.</p>
-        <div class="section_actions">
-          <button id="reset_inventory_button" class="text_button text_button_danger" type="button">
-            <i class="fa-solid fa-boxes-packing" aria-hidden="true"></i>
-            <span>Reiniciar inventario</span>
-          </button>
-          <p class="note">Vacía todo el inventario y vuelve al inicio con los rellenos iniciales en 0. Se conservan la semilla y la configuración del patio.</p>
-        </div>
-        <div id="inventory_body"></div>
-      </section>
-
-      <section id="dispatch_section" class="page_section" aria-labelledby="dispatch_title">
-        <h2 id="dispatch_title">Despachos</h2>
-        <p class="section_intro">Los pedidos salen a cada hora de corte (se pueden cambiar), un camión por ciudad de destino. Aquí se ven lo que está listo para el próximo corte, el informe de los camiones que salieron y la Entrega a Tiempo (OTD), que se puede descargar. También se cierra la entrada de camiones de despacho.</p>
-        <div id="dispatch_body"></div>
-      </section>
-
       <section id="params_section" class="page_section" aria-labelledby="params_title">
         <h2 id="params_title">Parámetros</h2>
         <p class="section_intro">Se aplican al instante, sin reiniciar (salvo los de inicio).</p>
@@ -200,6 +186,42 @@
           <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
           <span>Valores de fábrica</span>
         </button>
+      </section>
+
+      <section id="yard_section" class="page_section" aria-labelledby="yard_title">
+        <h2 id="yard_title">Patio de recibo y muelles</h2>
+        <p class="section_intro">Cuántos camiones llegan, qué muelles se usan, qué mercancía tiene prioridad y las restricciones de cada camión. Lo que cambies en los camiones por franja vale para las franjas que todavía no han empezado.</p>
+        <div id="yard_body"></div>
+      </section>
+
+      <section id="inventory_section" class="page_section" aria-labelledby="inventory_title">
+        <h2 id="inventory_title">Inventario</h2>
+        <p class="section_intro">Empieza en cero: cada caja se anota cuando un camión la suelta en el riel y se descuenta cuando sale en un camión de despacho. La mercancía va de la bodega de stock a la reserva y de la reserva al activo. Arriba, la mercancía total del centro de distribución, cuánta hay en cada lugar y cuánto cabe.</p>
+        <div id="inventory_body"></div>
+      </section>
+
+      <section id="economy_section" class="page_section" aria-labelledby="economy_title">
+        <h2 id="economy_title">Economía</h2>
+        <p class="section_intro">Cuánto dinero se gastó en comprar mercancía, cuánto vale lo que hay hoy en el centro de distribución y cuánto se vendió, en pesos colombianos. Es solo seguimiento: el dinero no limita la simulación. Los precios de compra y de venta de cada producto se cambian en Mercancía.</p>
+        <div id="economy_body"></div>
+      </section>
+
+      <section id="catalog_section" class="page_section" aria-labelledby="catalog_title">
+        <h2 id="catalog_title">Mercancía</h2>
+        <p class="section_intro">Crea categorías y productos (nombre, color, unidades por caja, tamaño de caja, prioridad y precios de compra y de venta) y reparte el activo por piso. Lo que cambies aquí no afecta la simulación que corre: al «Aplicar y reiniciar» se guarda y la bodega empieza de cero con el catálogo nuevo. Un producto solo se puede quitar si no tiene mercancía en la bodega.</p>
+        <div id="catalog_body"></div>
+      </section>
+
+      <section id="dispatch_section" class="page_section" aria-labelledby="dispatch_title">
+        <h2 id="dispatch_title">Despachos</h2>
+        <p class="section_intro">Los pedidos salen a cada hora de corte (se pueden cambiar), un camión por ciudad de destino. Aquí se ven lo que está listo para el próximo corte, el informe de los camiones que salieron y la Entrega a Tiempo (OTD), que se puede descargar. También se cierra la entrada de camiones de despacho.</p>
+        <div id="dispatch_body"></div>
+      </section>
+
+      <section id="map_section" class="page_section" aria-labelledby="map_title">
+        <h2 id="map_title">Mapa de despachos</h2>
+        <p class="section_intro">Cada camión de despacho que sale en un corte avanza por el mapa hasta la ciudad de sus clientes: se ve dónde va, cuántos kilómetros lleva, cuántos le faltan, qué mercancía carga y a qué hora llega. Elige un camión en la tabla o en el mapa para ver su detalle.</p>
+        <div id="map_body"></div>
       </section>
 
       <section id="kpis_section" class="page_section" aria-labelledby="kpis_title">
@@ -229,8 +251,16 @@
           </div>
           <div>
             <h3 id="entities_title">Todo lo que hay en la bodega</h3>
-            <label class="visually_hidden" for="entity_search">Buscar en la lista</label>
-            <input id="entity_search" class="search_input" type="search" placeholder="Buscar: camión 4, pedido 123, piso…" autocomplete="off">
+            <div class="filter_bar">
+              <label class="filter_field filter_search">
+                <span class="filter_label">Buscar</span>
+                <input id="entity_search" class="filter_input" type="search" placeholder="Camión 4, pedido 123, piso…" autocomplete="off">
+              </label>
+              <label class="filter_field filter_select">
+                <span class="filter_label">Tipo</span>
+                <select id="entity_group" class="table_select" aria-label="Tipo de elemento"><option value="">Todos los tipos</option></select>
+              </label>
+            </div>
             <p id="entity_count" class="placeholder"></p>
             <ul id="entity_list" class="item_list"></ul>
           </div>
@@ -268,7 +298,7 @@
     <!-- Diálogos -->
     <dialog id="reset_dialog" class="dialog" aria-labelledby="reset_title">
       <h2 id="reset_title">¿Reiniciar la simulación?</h2>
-      <p id="reset_text">Se vuelve al inicio con la semilla elegida y se pierde el avance actual.</p>
+      <p id="reset_text">Se vuelve al inicio y se pierde el avance actual.</p>
       <label id="reset_otd_label" class="check_label" hidden>
         <input id="reset_otd_check" type="checkbox" checked>
         <span>Descargar el KPI OTD de esta corrida antes de reiniciar</span>
@@ -276,6 +306,15 @@
       <div class="dialog_actions">
         <button id="reset_cancel_button" class="text_button" type="button">Cancelar</button>
         <button id="reset_confirm_button" class="text_button text_button_primary" type="button" autofocus>Reiniciar</button>
+      </div>
+    </dialog>
+
+    <dialog id="merch_dialog" class="dialog" aria-labelledby="merch_title">
+      <h2 id="merch_title">¿Aplicar y reiniciar?</h2>
+      <p>Se guardan el catálogo y la distribución del activo y la página se recarga: la simulación empieza de cero, con el inventario vacío y el e-commerce apagado. Se conservan los parámetros y la configuración del patio.</p>
+      <div class="dialog_actions">
+        <button id="merch_cancel_button" class="text_button" type="button">Volver</button>
+        <button id="merch_confirm_button" class="text_button text_button_primary" type="button" autofocus>Aplicar y reiniciar</button>
       </div>
     </dialog>
 

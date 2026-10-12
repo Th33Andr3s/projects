@@ -6,36 +6,34 @@
 // mismas acciones terminan igual. Lo que la interfaz y el dibujo necesitan se lee de las listas públicas (`boxes`, `pallets`,
 // `totes`, `parcels`, `belts`, los actores de cada sistema) y de `drain_events()`.
 
-import {
-  ACTIVE_SKU_CAPACITY,
-  SIM_STEP_SECONDS,
-  SKU_COUNT,
-} from "./config.js";
+import { FLOOR_COUNT, SIM_STEP_SECONDS } from "./config.js";
 import { EventQueue } from "./event_queue.js";
 import { Rng } from "./rng.js";
 import { build_belt_paths } from "./layout.js";
-import { sku_label, sku_name } from "./catalog.js";
+import { SKUS, sku_label, sku_name } from "./catalog.js";
 import { build_gate_lanes } from "./gates.js";
 import { Inventory } from "./inventory.js";
 import { format_sim_datetime } from "./format.js";
-import { Box, Pallet, step_clock } from "./entities.js";
+import { Box, step_clock } from "./entities.js";
+import { default_allocation } from "./active_layout.js";
 import { Disruptions } from "./disruptions.js";
 import { ReceivingSystem } from "./sim_receiving.js";
 import { DockFleet } from "./sim_dock_fleet.js";
 import { StorageSystem } from "./sim_storage.js";
 import { OrdersSystem } from "./sim_orders.js";
+import { Coordinator } from "./sim_coordinator.js";
 import { OutboundSystem } from "./sim_outbound.js";
 
 // Cada cuánto se recalculan las alertas y se acumulan las utilizaciones
-const SLOW_UPDATE_SECONDS = 1;
+const SLOW_UPDATE_SECONDS = 5;
 const MAX_PENDING_EVENTS = 400;
 const FLASH_SECONDS = 1.2;
 const FINISHED_ORDERS_KEPT = 300;
 
 export class Simulation {
-  // `yard` es la configuración del patio (camiones por franja, muelles, prioridades, restricciones) y `start_ms` el instante
+  // `yard` es la configuración del patio (camiones por franja, muelles, restricciones) y `start_ms` el instante
   // real (UTC) que corresponde a las 6 de la mañana del primer día, para escribir fechas
-  constructor(config, yard, layout, seed, start_ms) {
+  constructor(config, yard, layout, seed, start_ms, allocation = default_allocation()) {
     this.config = config;
     this.yard = yard;
     this.layout = layout;
@@ -51,10 +49,9 @@ export class Simulation {
     this.rng_destinations = root.fork("destinos");
     this.rng_order_destinations = root.fork("destinos_pedidos");
     this.rng_routes = root.fork("viajes");
-    this.rng_split = root.fork("reparto");
+    this.rng_coordinator = root.fork("coordinador");
     this.rng_orders = root.fork("pedidos");
     this.rng_pack = root.fork("empaque");
-    this.rng_init = root.fork("inicio");
 
     this.events = new EventQueue();
     this.ids = {};
@@ -66,7 +63,10 @@ export class Simulation {
       orders_created: 0,
       orders_packed: 0,
       orders_dispatched: 0,
+      orders_delivered: 0,
       orders_cancelled: 0,
+      orders_rejected: 0,
+      lines_unfilled: 0,
       trucks_dispatched: 0,
       cutoffs_run: 0,
       late_shipments: 0,
@@ -89,9 +89,12 @@ export class Simulation {
     this.slow_timer = 0;
     this.reschedule_orders = false;
 
+    // Qué producto va en cada piso del activo y en qué proporción
+    this.allocation = allocation;
     this.gates = build_gate_lanes();
     this.disruptions = new Disruptions(this);
     this.inventory = new Inventory(this);
+    this.coordinator = new Coordinator(this);
     this.receiving = new ReceivingSystem(this);
     this.storage = new StorageSystem(this);
     this.dock_fleet = new DockFleet(this);
@@ -107,9 +110,7 @@ export class Simulation {
       if (key === "orders_per_minute" || key === "max_order_lines") this.reschedule_orders = true;
     });
 
-    this.fill_initial();
     this.orders.sync_walls();
-    this.orders.schedule_next_order(0);
   }
 
   dispose() {
@@ -118,7 +119,7 @@ export class Simulation {
   }
 
   // ---------- Servicios para los sistemas ----------
-  // Las dos flotas de montacargas juntas: las de muelle a stock y las de stock a racks y multinivel
+  // Las tres flotas de montacargas juntas: de muelle a stock, de stock a reserva y de reserva a activo
   get forklifts() {
     return [...this.dock_fleet.forklifts, ...this.storage.forklifts];
   }
@@ -153,6 +154,7 @@ export class Simulation {
 
   new_box(sku_id, now) {
     const box = new Box(this.next_id("box"), sku_id, now);
+    box.list_index = this.boxes.length;
     this.boxes.push(box);
     this.counters.boxes_created += 1;
     return box;
@@ -160,7 +162,12 @@ export class Simulation {
 
   retire_box(box) {
     this.counters.boxes_shipped += 1;
-    this.boxes = this.boxes.filter((candidate) => candidate !== box);
+    // Se saca de la lista cambiándola de lugar con la última (con decenas de miles de cajas, recorrer la lista en cada envío no aguanta)
+    const last = this.boxes.pop();
+    if (last !== box) {
+      this.boxes[box.list_index] = last;
+      last.list_index = box.list_index;
+    }
   }
 
   emit(event) {
@@ -173,45 +180,6 @@ export class Simulation {
     const drained = this.pending_events;
     this.pending_events = [];
     return drained;
-  }
-
-  // ---------- Relleno inicial ----------
-  fill_initial() {
-    const { config, storage, rng_init } = this;
-    const active_fill = config.get("initial_active_fill") / 100;
-    const reserve_fill = config.get("initial_reserve_fill") / 100;
-    // Las cajas del relleno inicial recorren los estados que tendrían si hubieran llegado por un camión
-    const to_receiving = (box) => ["ON_RAIL", "ON_DOCK_PALLET", "IN_STAGING"].forEach((state) => box.machine.go_to(state, 0));
-
-    for (let sku = 0; sku < SKU_COUNT; sku += 1) {
-      // Con el activo en cero (lo normal al empezar) no queda ni una caja suelta por el redondeo
-      const wanted = active_fill === 0 ? 0 : Math.round(ACTIVE_SKU_CAPACITY * active_fill) + rng_init.int(-2, 2);
-      const count = Math.min(ACTIVE_SKU_CAPACITY, Math.max(0, wanted));
-      for (let index = 0; index < count; index += 1) {
-        const box = this.new_box(sku, 0);
-        to_receiving(box);
-        box.machine.go_to("IN_TOTE", 0);
-        storage.add_to_active(box, 0);
-      }
-    }
-
-    const pallet_count = Math.round(Math.min(storage.positions.length, config.get("reserve_capacity")) * reserve_fill);
-    const size = config.get("pallet_size");
-    for (let index = 0; index < pallet_count; index += 1) {
-      const sku = rng_init.int(0, SKU_COUNT - 1);
-      const pallet = new Pallet(this.next_id("pallet"), sku, size, 0);
-      for (let slot = 0; slot < size; slot += 1) {
-        const box = this.new_box(sku, 0);
-        to_receiving(box);
-        box.machine.go_to("ON_PALLET", 0);
-        box.container = pallet;
-        pallet.boxes.push(box);
-      }
-      pallet.machine.go_to("READY", 0);
-      pallet.machine.go_to("CARRIED", 0);
-      storage.store_pallet(pallet, storage.find_free_reserve_index(), 0);
-      this.pallets.push(pallet);
-    }
   }
 
   // ---------- Un paso ----------
@@ -234,6 +202,15 @@ export class Simulation {
     }
   }
 
+  // El e-commerce (los pedidos de clientes) arranca apagado y la persona lo enciende o lo apaga cuando quiera
+  get ecommerce_enabled() {
+    return this.orders.ecommerce_enabled;
+  }
+
+  set_ecommerce(enabled) {
+    this.orders.set_ecommerce(Boolean(enabled), this.now);
+  }
+
   // Avanza un paso de SIM_STEP_SECONDS. `now` es el tiempo simulado al final del paso.
   step(now) {
     const dt = SIM_STEP_SECONDS;
@@ -252,6 +229,7 @@ export class Simulation {
     let event;
     while ((event = this.events.pop_due(now))) this.handle_event(event, now);
 
+    this.coordinator.step(now);
     this.receiving.step(now, dt);
     this.storage.step(now, dt);
     this.dock_fleet.step(now, dt);
@@ -302,9 +280,16 @@ export class Simulation {
       alerts.push({ key: "parking_full", severity: "warn", text: "Parqueadero lleno: los camiones esperan en la carretera." });
     }
 
-    // Una caja que se mueve por una banda que corre es avance para su pedido
-    this.boxes.forEach((box) => {
-      if (box.order && box.belt && box.belt.is_running && !box.belt.is_stalled) box.order.last_progress_at = now;
+    if (orders.backlog_full()) {
+      alerts.push({ key: "orders_backlog", severity: "warn", text: "Demasiados pedidos esperando: no entran pedidos nuevos hasta que se atienda la cola (suma operarios o muros)." });
+    }
+
+    // Lo que se mueve por una banda que corre es avance para su pedido (se recorren las bandas, no todas las cajas de la bodega)
+    this.belts.forEach((belt) => {
+      if (!belt.is_running || belt.is_stalled) return;
+      belt.items.forEach((item) => {
+        if (item.order) item.order.last_progress_at = now;
+      });
     });
 
     const jam_order = orders.wall_jam_active && orders.jam_box ? orders.jam_box.order : null;
@@ -321,10 +306,12 @@ export class Simulation {
     orders.orders.forEach((order) => {
       if (!order.is_cancellable || order === jam_order) return;
       if (now - order.last_progress_at < limit) return;
+      // Un pedido que espera su turno para soltarse a los operarios (muros ocupados) no está bloqueado: solo uno que espera existencias
+      if (order.machine.state === "CREATED" && !order.lines.some((line) => line.machine.state === "WAITING_STOCK")) return;
       alerts.push({ key: `blocked_${order.id}`, severity: "danger", order_id: order.id, text: this.blocked_reason(order) });
     });
 
-    for (let sku = 0; sku < SKU_COUNT; sku += 1) {
+    for (let sku = 0; sku < SKUS.length; sku += 1) {
       const waiting = orders.waiting_lines(sku);
       if (waiting > 0 && storage.available(sku) <= 0 && storage.reserve_boxes(sku) === 0 && storage.inbound[sku] === 0 && this.receiving.staged_boxes_of(sku) === 0) {
         alerts.push({ key: `no_stock_${sku}`, severity: "warn", text: `${sku_name(sku)} sin stock en ningún lado: ${waiting} ${waiting === 1 ? "línea espera" : "líneas esperan"} reposición.` });
@@ -394,20 +381,27 @@ export class Simulation {
         on_belts += item.boxes ? item.boxes.length : 1;
       });
     });
-    const capacity = Math.min(storage.positions.length, config.get("reserve_capacity"));
+    const capacity = storage.reserve_pallet_capacity();
+    const floor_capacity = config.get("active_capacity") / FLOOR_COUNT;
     return {
       trucks_received: counters.trucks_received,
+      trucks_requested: this.coordinator.requested_trucks,
+      trucks_requested_urgent: this.coordinator.requested_urgent,
       boxes_received: counters.boxes_received,
       reserve_used: storage.reserve_used(),
       reserve_capacity: capacity,
       reserve_percent: capacity > 0 ? Math.round((storage.reserve_used() / capacity) * 100) : 0,
-      floor_percent: Array.from({ length: 5 }, (_, floor) => Math.round((storage.floor_count(floor) / (ACTIVE_SKU_CAPACITY * (SKU_COUNT / 5))) * 100)),
+      floor_percent: Array.from({ length: FLOOR_COUNT }, (_, floor) => Math.round((storage.floor_count(floor) / floor_capacity) * 100)),
       orders_created: counters.orders_created,
+      orders_waiting: orders.pending.length,
       orders_picking: picking,
       orders_consolidating: consolidating,
       orders_packed: counters.orders_packed,
       orders_dispatched: counters.orders_dispatched,
+      orders_delivered: counters.orders_delivered,
       orders_cancelled: counters.orders_cancelled,
+      orders_rejected: counters.orders_rejected,
+      lines_unfilled: counters.lines_unfilled,
       cycle_average_seconds: counters.cycle_count > 0 ? counters.cycle_time_total / counters.cycle_count : null,
       boxes_on_belts: on_belts,
       forklift_utilization: utilization.forklift_total > 0 ? Math.round((utilization.forklift_busy / utilization.forklift_total) * 100) : 0,
@@ -415,7 +409,8 @@ export class Simulation {
       trucks_dispatched: counters.trucks_dispatched,
       cutoffs_run: counters.cutoffs_run,
       late_shipments: counters.late_shipments,
-      otd_percent: counters.orders_dispatched > 0 ? Math.round((counters.orders_on_time / counters.orders_dispatched) * 100) : null,
+      // El OTD mide solo entregas: pedidos a tiempo entre pedidos que ya llegaron al cliente
+      otd_percent: counters.orders_delivered > 0 ? Math.round((counters.orders_on_time / counters.orders_delivered) * 100) : null,
       staging_boxes: this.receiving.staging.length,
       staging_percent: Math.round((this.receiving.staging.length / Math.max(1, this.receiving.staging_capacity())) * 100),
       trucks_parked: this.receiving.parked_count,

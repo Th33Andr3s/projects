@@ -1,5 +1,5 @@
 // La programación de los camiones de recibo: para cada día y cada franja (mañana, tarde, noche) se sortean cuántos camiones
-// configuró la persona, a qué hora llegan a la talanquera, qué categoría traen (según la prioridad), de qué región de Colombia
+// configuró la persona, a qué hora llegan a la talanquera, qué categoría traen (según la prioridad de sus productos), de qué región de Colombia
 // vienen y qué cajas llevan. La programación de hoy y de mañana está siempre armada, así se pueden poner restricciones a un
 // camión antes de que llegue.
 //
@@ -11,11 +11,19 @@ import { CATEGORIES, REGIONS, SKUS, category_sku_ids, make_route } from "./catal
 import { SLOTS, SLOT_OFFSETS, slot_label } from "./yard_config.js";
 
 export const DAY_SECONDS = 86400;
+
+// La prioridad de un camión: la más alta de los productos que trae. Pasa primero a un muelle libre el de mayor prioridad.
+export function entry_priority(entry) {
+  return Math.max(...entry.product_ids.map((sku_id) => SKUS[sku_id].priority));
+}
 // Lo que tarda un camión en recorrer la carretera desde el borde de la pantalla hasta la talanquera
 export const TRUCK_LEAD_SECONDS = 30;
 // Cuánto separa la salida de dos camiones pedidos a mano
 const MANUAL_SPACING_SECONDS = 5;
 export const MAX_MANUAL_TRUCKS = 40;
+// Cuántos camiones recuerda la programación antes de soltar los terminados más viejos, y cuántos terminados deja
+const PRUNE_ENTRIES_AT = 500;
+const FINISHED_ENTRIES_KEPT = 150;
 
 // Cuándo empieza y termina una franja de un día (segundos desde el arranque del reloj)
 export function slot_window(day, slot_key) {
@@ -50,6 +58,21 @@ export class TruckSchedule {
     for (let offset = 0; offset < 2; offset += 1) {
       SLOTS.forEach((slot) => this.ensure(day + offset, slot, now));
     }
+    if (this.entries.length > PRUNE_ENTRIES_AT) this.prune(day);
+  }
+
+  // Tras días de corrida la lista de camiones crece sin fin: se sueltan los terminados más viejos (la tabla solo muestra los últimos) y
+  // las franjas de días que ya pasaron
+  prune(day) {
+    let finished = this.entries.filter((entry) => entry.finished).length;
+    this.entries = this.entries.filter((entry) => {
+      if (!entry.finished) return true;
+      finished -= 1;
+      return finished < FINISHED_ENTRIES_KEPT;
+    });
+    [...this.generated.keys()].forEach((key) => {
+      if (Number(key.split(":")[0]) < day - 1) this.generated.delete(key);
+    });
   }
 
   ensure(day, slot, now) {
@@ -95,13 +118,14 @@ export class TruckSchedule {
     this.generated.set(key, { count, entries: created });
   }
 
-  // Sortea lo que trae un camión: categoría según la prioridad, región y ciudad de origen, y las cajas
+  // Sortea lo que trae un camión: categoría según la prioridad de sus productos, región y ciudad de origen, y las cajas (de los
+  // productos de esa categoría, más seguido los de mayor prioridad)
   make_entry(day, slot_key, arrival, now) {
     const { sim } = this;
-    const weights = CATEGORIES.map((_, index) => sim.yard.get_priority(index));
+    const weights = CATEGORIES.map((_, index) => category_sku_ids(index).reduce((sum, sku_id) => sum + SKUS[sku_id].priority, 0));
     const total = weights.reduce((sum, weight) => sum + weight, 0);
     let pick = sim.rng_agenda.float(0, total);
-    let category_index = 0;
+    let category_index = weights.findIndex((weight) => weight > 0);
     for (let index = 0; index < weights.length; index += 1) {
       pick -= weights[index];
       if (pick < 0) {
@@ -112,13 +136,20 @@ export class TruckSchedule {
     const region_index = sim.rng_agenda.int(0, REGIONS.length - 1);
     const city_index = sim.rng_agenda.int(0, REGIONS[region_index].cities.length - 1);
     const box_count = Math.max(4, Math.round(sim.config.get("boxes_per_truck") * sim.rng_agenda.float(0.85, 1.15)));
-    // Cajas de los cuatro productos de la categoría, sin repetir producto en cada tanda de cuatro
-    const sku_ids = [];
     const category_skus = category_sku_ids(category_index);
+    const sku_weight = category_skus.reduce((sum, sku_id) => sum + SKUS[sku_id].priority, 0);
+    const sku_ids = [];
     while (sku_ids.length < box_count) {
-      sim.rng_agenda.shuffle([...category_skus]).forEach((sku_id) => {
-        if (sku_ids.length < box_count) sku_ids.push(sku_id);
-      });
+      let box_pick = sim.rng_agenda.float(0, sku_weight);
+      let chosen = category_skus[category_skus.length - 1];
+      for (const sku_id of category_skus) {
+        box_pick -= SKUS[sku_id].priority;
+        if (box_pick < 0) {
+          chosen = sku_id;
+          break;
+        }
+      }
+      sku_ids.push(chosen);
     }
     return {
       id: 0,
@@ -130,6 +161,7 @@ export class TruckSchedule {
       spawn_event_id: null,
       spawned: false,
       category_index,
+      product_ids: [...new Set(sku_ids)],
       sku_ids,
       box_count,
       units: sku_ids.reduce((sum, sku_id) => sum + SKUS[sku_id].units_per_box, 0),
@@ -138,6 +170,47 @@ export class TruckSchedule {
       finished: false,
       created_at: now,
     };
+  }
+
+  // Una ruta de origen al azar (región y ciudad de Colombia), para un camión que pide el coordinador
+  pick_origin() {
+    const { sim } = this;
+    const region_index = sim.rng_coordinator.int(0, REGIONS.length - 1);
+    const city_index = sim.rng_coordinator.int(0, REGIONS[region_index].cities.length - 1);
+    return make_route(region_index, city_index, true);
+  }
+
+  // El coordinador pide un camión con `box_count` cajas de un solo producto, que llega a la talanquera a las `arrival` segundos.
+  // Sale a la carretera 30 s antes y no cuenta en los camiones por franja.
+  add_requested(sku_id, box_count, arrival, urgent, route, now) {
+    const { sim } = this;
+    const sku_ids = Array(box_count).fill(sku_id);
+    const entry = {
+      id: this.next_id,
+      day: Math.floor(arrival / DAY_SECONDS) + 1,
+      slot: urgent ? "urgent" : "coordinator",
+      arrival_time: arrival,
+      arrival_text: sim.format_time(arrival),
+      spawn_time: Math.max(now, arrival - TRUCK_LEAD_SECONDS),
+      spawn_event_id: null,
+      spawned: false,
+      category_index: SKUS[sku_id].category_index,
+      product_ids: [sku_id],
+      sku_ids,
+      box_count,
+      units: box_count * SKUS[sku_id].units_per_box,
+      route,
+      truck: null,
+      finished: false,
+      created_at: now,
+      coordinated: true,
+      urgent,
+    };
+    this.next_id += 1;
+    entry.spawn_event_id = sim.events.schedule(entry.spawn_time, "truck_spawn", { entry });
+    this.entries.push(entry);
+    this.entries.sort((first, second) => first.arrival_time - second.arrival_time || first.id - second.id);
+    return entry;
   }
 
   // La persona pide que lleguen `count` camiones ya: salen a la carretera uno tras otro, con unos segundos entre sí para que no
@@ -210,6 +283,7 @@ export class TruckSchedule {
   // Lo que dice la tabla en la columna de estado
   status_text(entry) {
     const truck = entry.truck;
+    if (entry.skipped) return "No llegó (llegadas detenidas)";
     if (!truck) return entry.spawned ? "En camino" : "Programado";
     const states = {
       ARRIVING: "En la entrada",

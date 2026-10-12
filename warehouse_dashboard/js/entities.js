@@ -6,8 +6,8 @@
 // así el movimiento se ve continuo aunque la simulación avance en pasos de 0,25 s.
 
 import { StateMachine } from "./state_machines.js";
+import { TOTE_CAPACITY } from "./config.js";
 import { make_path, sample_path } from "./path_tools.js";
-import { sku_floor } from "./config.js";
 import { SKUS, sku_category, sku_label } from "./catalog.js";
 
 // El número del paso de simulación en curso (lo pone Simulation.step). Con él se sabe si algo se movió en este paso: lo que no se
@@ -88,8 +88,11 @@ export class Box extends Renderable {
     this.line = null;
     // Contenedor donde está: pallet, cubeta, casilla de muro...
     this.container = null;
-    // Posición dentro del activo (0 a 59) o -1
-    this.slot_index = -1;
+    // El tramo del activo (piso y producto) donde está guardada, o null; y el piso del que salió para un pedido
+    this.segment = null;
+    this.home_floor = null;
+    // Desde qué pasillo del piso se recoge, cuando está apartada
+    this.aisle_z = 0;
     // Está apartada para una línea de pedido pero todavía en su sitio del activo
     this.reserved = false;
     // El producto define cuántas unidades lleva la caja y cuánto mide (largo, alto, fondo en metros)
@@ -98,6 +101,8 @@ export class Box extends Renderable {
     // El camión que la trajo (ninguno si venía del inventario inicial)
     this.truck = null;
     this.belt_length = this.size[0] + 0.1;
+    // Su lugar en la lista de cajas de la simulación (para sacarla sin recorrer la lista)
+    this.list_index = -1;
     this.s = 0;
     this.gate_index = 0;
     this.belt = null;
@@ -109,10 +114,10 @@ export class Box extends Renderable {
       IN_TRUCK: "Rieles de recibo",
       ON_RAIL: "Pallet de descarga del muelle",
       ON_DOCK_PALLET: "Bodega de recibo",
-      IN_STAGING: "Pallet o cubeta",
+      IN_STAGING: "Pallet de la reserva",
       ON_PALLET: "Racks de reserva",
       IN_RESERVE: "Multinivel activo (si hace falta reabasto)",
-      IN_TOTE: "Elevador y piso de su SKU",
+      IN_TOTE: "Elevador y piso del activo",
       IN_ACTIVE: "Esperando un pedido",
       PICKED: "Banda del piso",
       ON_FLOOR_BELT: "Banda principal",
@@ -130,7 +135,8 @@ export class Box extends Renderable {
     return info(this, "Caja", destinations[this.machine.state], now, [
       ["Número de caja", String(this.id)],
       ["SKU", sku_label(this.sku_id)],
-      ["Categoría", `${sku_category(this.sku_id).name} (piso ${sku_floor(this.sku_id) + 1})`],
+      ["Categoría", sku_category(this.sku_id).name],
+      ["Piso del activo", this.segment ? String(this.segment.floor + 1) : "—"],
       ["Unidades en la caja", String(this.units)],
       ["Lugar de procedencia", truck ? `${truck.route.city} · Región ${truck.route.region}` : "Inventario inicial"],
       ["Camión asociado", truck ? `Camión ${truck.id}` : "—"],
@@ -166,10 +172,10 @@ export class Pallet extends Renderable {
       ]);
     }
     const destinations = {
-      FORMING: "Esperando una montacarga",
+      FORMING: "Esperando una montacarga de stock a reserva",
       READY: "Racks de reserva",
       CARRIED: "Racks de reserva",
-      IN_RESERVE: "Reserva (hasta que haga falta)",
+      IN_RESERVE: "Reserva (hasta que haga falta en el activo)",
       CARRIED_TO_REPLENISH: "Pie del multinivel",
       UNPACKED: "—",
     };
@@ -188,8 +194,10 @@ export class Tote extends Renderable {
     this.machine = new StateMachine(variant === "in" ? "tote_in" : "tote_out", now);
     this.boxes = [];
     this.floor = -1;
+    // El tramo del activo al que va una cubeta de entrada
+    this.segment = null;
     this.order = null;
-    this.capacity = 6;
+    this.capacity = TOTE_CAPACITY;
     this.last_added_at = now;
     this.belt_length = 1.1;
     this.s = 0;
@@ -448,9 +456,11 @@ export class Truck extends Actor {
 }
 
 // ---------- Montacargas y personas ----------
+const FLEET_NAMES = { dock: "Montacarga de muelle a stock", stock: "Montacarga de stock a reserva", replen: "Montacarga de reserva a activo" };
+
 export class Forklift extends Actor {
-  // fleet: "dock" (lleva pallets de descarga del muelle a la bodega de recibo) o "stock" (lleva pallets a los racks y cubetas al
-  // multinivel, y trae los pallets de reabasto)
+  // fleet: "dock" (lleva pallets de descarga del muelle a la bodega de stock), "stock" (lleva los pallets de la bodega de stock a los
+  // racks de la reserva) o "replen" (trae pallets de la reserva al pie del multinivel para surtir el activo)
   constructor(id, now, fleet = "stock") {
     super("forklift", id, "forklift", 3.0, now);
     this.fleet = fleet;
@@ -465,7 +475,7 @@ export class Forklift extends Actor {
   get_info(now) {
     const task = this.task;
     const destination = task ? task.description : "Taller de montacargas";
-    const type = this.fleet === "dock" ? "Montacarga de muelle a stock" : "Montacarga de stock a racks y multinivel";
+    const type = FLEET_NAMES[this.fleet];
     return info(this, type, destination, now, [["Tarea", task ? task.description : "Ninguna"]]);
   }
 }
@@ -522,6 +532,10 @@ export class Order {
     this.promised_cutoff = null;
     this.cutoff_at = null;
     this.late = false;
+    // Su lugar en la lista de pedidos de la simulación (para sacarlo sin recorrer la lista)
+    this.list_index = -1;
+    // Ya se soltó a los operarios (sus líneas están en la cola de picking o ya se recogieron)
+    this.released = false;
     this.order = this;
     this.x = 0;
     this.y = 0;
@@ -724,7 +738,7 @@ export class StockStack {
       type: "Pila de la bodega de recibo",
       id_text: sku_label(this.sku_id),
       state: this.boxes > 0 ? `${this.boxes} ${this.boxes === 1 ? "caja" : "cajas"}` : "Vacía",
-      destination: "Pallets de la reserva y cubetas del activo",
+      destination: "Pallets de la reserva",
       order: "—",
       time_in_state: "—",
       extra: [
@@ -774,6 +788,39 @@ export class DispatchBin {
         ["Unidades", String(this.units)],
         ["Pedidos tardíos", String(late)],
         ["Próximo corte", this.next_cutoff_text],
+      ],
+    };
+  }
+}
+
+// Un tramo del activo: lo que hay de un producto en un piso del multinivel. Es lo que se elige al tocar una casilla de estante.
+export class ActiveShelf {
+  constructor(segment, center) {
+    this.kind = "active_shelf";
+    this.segment = segment;
+    this.id = `${segment.floor + 1}.${segment.sku_id + 1}`;
+    this.x = center.x;
+    this.y = center.y;
+    this.z = center.z;
+    this.order = null;
+    // Los llena Storage: cuánto cabe y cuánto viene en cubetas
+    this.capacity = 0;
+  }
+
+  get_info() {
+    const { segment } = this;
+    return {
+      type: "Estante del activo",
+      id_text: `Piso ${segment.floor + 1} · ${sku_label(segment.sku_id)}`,
+      state: `${segment.boxes.length} de ${this.capacity} cajas`,
+      destination: "Pedidos de clientes",
+      order: "—",
+      time_in_state: "—",
+      extra: [
+        ["Producto", sku_label(segment.sku_id)],
+        ["Piso", String(segment.floor + 1)],
+        ["Cajas apartadas para pedidos", String(segment.reserved)],
+        ["Cajas en camino (cubetas)", String(segment.inbound)],
       ],
     };
   }

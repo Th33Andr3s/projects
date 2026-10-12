@@ -1,26 +1,19 @@
 // Recibo: los camiones programados salen a la carretera, esperan en la talanquera, entran, van a un muelle libre o se parquean
-// en orden hasta que se desocupe uno, se acoplan de reversa, descargan las cajas por el riel hasta una mesa, y de ahí cada caja
-// se reparte al azar (70 % / 30 %) a un pallet de su SKU, que va a la reserva, o a una cubeta de su piso, que sube al activo.
-// Es el único lugar donde entran cajas nuevas a la bodega.
+// en orden hasta que se desocupe uno, se acoplan de reversa y descargan las cajas por el riel hasta un pallet de descarga que una
+// montacarga lleva a la bodega de stock. De ahí, cada caja pasa a un pallet de su SKU, que va a la reserva; la reserva surte al
+// activo (ver sim_storage.js). Es el único lugar donde entran cajas nuevas a la bodega.
 //
 // Quién pasa primero a un muelle libre: los camiones de la categoría con mayor prioridad y, entre iguales, el que llegó antes.
 // A un camión con restricción solo se le da el muelle que pidió y solo desde la franja que pidió; mientras tanto espera
 // parqueado y no estorba a los demás.
 
-import {
-  PALLET_FLUSH_SECONDS,
-  RAIL_SPEED,
-  SPLIT_RESERVE,
-  TOTE_CAPACITY,
-  TOTE_FLUSH_SECONDS,
-  sku_floor,
-} from "./config.js";
+import { PALLET_FLUSH_SECONDS, RAIL_SPEED } from "./config.js";
 import { CATEGORIES, SKUS } from "./catalog.js";
 import { Belt } from "./belts.js";
-import { Dock, Pallet, StockStack, Tote, Truck } from "./entities.js";
-import { GATES, PALLET_SPOTS, PARKING, ROAD_SPAWN_X, TOTE_STATIONS, staging_slot } from "./layout.js";
+import { Dock, Pallet, StockStack, Truck } from "./entities.js";
+import { GATES, PALLET_SPOTS, PARKING, ROAD_SPAWN_X, staging_slot } from "./layout.js";
 import { heading_yaw } from "./path_tools.js";
-import { TruckSchedule } from "./truck_schedule.js";
+import { TruckSchedule, entry_priority } from "./truck_schedule.js";
 
 const DOOR_SECONDS = 1.5;
 const TURN_SECONDS = 2.5;
@@ -59,10 +52,9 @@ export class ReceivingSystem {
     this.waiting = [];
     this.forming_pallets = [];
     this.pallet_spots = PALLET_SPOTS.map(() => null);
-    this.filling_totes = TOTE_STATIONS.map(() => null);
     this.schedule = new TruckSchedule(sim);
-    // La bodega de recibo: todo lo que baja de los camiones entra aquí (en orden de llegada) y de aquí se reparte a pallets y
-    // cubetas. Así la descarga no espera a que haya pallet o cubeta libre.
+    // La bodega de stock: todo lo que baja de los camiones entra aquí (en orden de llegada) y de aquí se reparte a pallets. Así la
+    // descarga no espera a que haya un pallet libre.
     this.staging = [];
     this.stacks = SKUS.map((sku) => new StockStack(sku.id, staging_slot(sku.id)));
     // Cuánto reparto "acumulado" hay: se gasta de a una caja
@@ -82,6 +74,12 @@ export class ReceivingSystem {
   // ---------- Del borde de la pantalla a la talanquera ----------
   on_truck_spawn(entry, now) {
     const { sim } = this;
+    // Con las llegadas detenidas el camión no sale: la entrada queda como terminada sin haber llegado (al reanudar no llegan de golpe)
+    if (sim.yard.arrivals_blocked) {
+      entry.skipped = true;
+      entry.finished = true;
+      return;
+    }
     // Si la fila de la carretera ya llega hasta el borde de la pantalla, el camión espera unos segundos afuera para no aparecer
     // encima del último
     if (this.trucks.some((truck) => truck.on_road && truck.x < -ROAD_SPAWN_X + ROAD_QUEUE_SPACING + 2)) {
@@ -155,10 +153,9 @@ export class ReceivingSystem {
     return this.docks.find((dock) => dock.enabled && !dock.truck && this.schedule.can_use_dock(truck.entry, dock.index, now)) || null;
   }
 
-  // Mayor prioridad de su categoría primero; entre iguales, el que llegó antes
+  // Mayor prioridad de su mercancía primero; entre iguales, el que llegó antes
   rank(first, second) {
-    const { yard } = this.sim;
-    return yard.get_priority(second.entry.category_index) - yard.get_priority(first.entry.category_index) || first.entry.arrival_time - second.entry.arrival_time || first.id - second.id;
+    return entry_priority(second.entry) - entry_priority(first.entry) || first.entry.arrival_time - second.entry.arrival_time || first.id - second.id;
   }
 
   // Los camiones que vienen por la carretera hacia la talanquera hacen fila: cada uno se queda detrás del que va delante
@@ -358,15 +355,15 @@ export class ReceivingSystem {
     });
   }
 
-  // Reparto: de la bodega de recibo salen cajas hacia pallets (reserva) y cubetas (activo) al ritmo configurado. Si a una caja no
-  // le toca todavía lugar (sin puesto de pallet o con la cubeta de su piso llena), se pasa a la siguiente.
+  // Reparto: de la bodega de stock salen cajas hacia pallets de la reserva al ritmo configurado. Si a una caja no le toca todavía
+  // lugar (sin puesto de pallet), se pasa a la siguiente.
   release_staging(now, dt) {
     const rate = this.sim.config.get("staging_release_per_minute") / 60;
     this.release_credit = Math.min(this.release_credit + rate * dt, MAX_RELEASE_CREDIT);
     let scanned = 0;
     for (let index = 0; index < this.staging.length && this.release_credit >= 1 && scanned < RELEASE_SCAN_LIMIT; scanned += 1) {
       const box = this.staging[index];
-      if (this.sort_box(box, now)) {
+      if (this.add_to_pallet(box, now)) {
         this.staging.splice(index, 1);
         const stack = this.stacks[box.sku_id];
         stack.boxes -= 1;
@@ -378,15 +375,7 @@ export class ReceivingSystem {
     }
   }
 
-  // ---------- Reparto ----------
-  sort_box(box, now) {
-    const { sim } = this;
-    if (box.route === undefined) box.route = sim.rng_split.chance(SPLIT_RESERVE) ? "reserve" : "active";
-    // Si el activo de su SKU ya no tiene lugar, la caja se va a la reserva
-    if (box.route === "active" && sim.storage.active_room(box.sku_id) <= 0) box.route = "reserve";
-    return box.route === "reserve" ? this.add_to_pallet(box, now) : this.add_to_tote(box, now);
-  }
-
+  // ---------- Pallets ----------
   add_to_pallet(box, now) {
     const { sim } = this;
     let pallet = this.forming_pallets.find((candidate) => candidate.sku_id === box.sku_id && candidate.boxes.length < candidate.capacity);
@@ -412,43 +401,6 @@ export class ReceivingSystem {
   close_pallet(pallet, now) {
     pallet.machine.go_to("READY", now);
     this.forming_pallets = this.forming_pallets.filter((candidate) => candidate !== pallet);
-  }
-
-  add_to_tote(box, now) {
-    const { sim } = this;
-    const floor = sku_floor(box.sku_id);
-    let tote = this.filling_totes[floor];
-    if (tote && tote.ready) return false;
-    if (!tote) {
-      tote = new Tote(sim.next_id("tote"), "in", now);
-      tote.floor = floor;
-      tote.ready = false;
-      tote.teleport(TOTE_STATIONS[floor].x, 0.2, TOTE_STATIONS[floor].z, 0);
-      this.filling_totes[floor] = tote;
-      sim.totes.push(tote);
-    }
-    box.machine.go_to("IN_TOTE", now);
-    box.container = tote;
-    tote.boxes.push(box);
-    tote.last_added_at = now;
-    sim.storage.inbound[box.sku_id] += 1;
-    if (tote.boxes.length >= TOTE_CAPACITY) this.mark_tote_ready(tote, now);
-    return true;
-  }
-
-  mark_tote_ready(tote, now) {
-    tote.ready = true;
-    tote.machine.go_to("READY", now);
-  }
-
-  // Las cubetas llenas que todavía no tiene una montacarga (las más viejas primero)
-  ready_totes() {
-    return this.filling_totes.filter((tote) => tote && tote.ready && !tote.claimed).sort((first, second) => first.id - second.id);
-  }
-
-  // Una montacarga levantó la cubeta: el puesto de su piso queda libre
-  release_tote_station(tote) {
-    if (this.filling_totes[tote.floor] === tote) this.filling_totes[tote.floor] = null;
   }
 
   // ---------- Un paso ----------
@@ -481,9 +433,6 @@ export class ReceivingSystem {
     this.forming_pallets
       .filter((pallet) => now - pallet.last_added_at >= PALLET_FLUSH_SECONDS && pallet.boxes.length > 0)
       .forEach((pallet) => this.close_pallet(pallet, now));
-    this.filling_totes.forEach((tote) => {
-      if (tote && !tote.ready && now - tote.last_added_at >= TOTE_FLUSH_SECONDS) this.mark_tote_ready(tote, now);
-    });
     this.flush_dock_pallets(now);
   }
 

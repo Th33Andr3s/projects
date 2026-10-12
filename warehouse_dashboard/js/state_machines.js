@@ -86,8 +86,9 @@ export const TRANSITIONS = {
   // Operario de picking de un piso
   worker_picker: {
     IDLE: ["WALKING_TO_SLOT"],
-    WALKING_TO_SLOT: ["PICKING"],
-    PICKING: ["PLACING_ON_BELT"],
+    // Si el pedido se cancela, el operario que iba a recoger deja lo que hacía y queda libre
+    WALKING_TO_SLOT: ["PICKING", "IDLE"],
+    PICKING: ["PLACING_ON_BELT", "IDLE"],
     PLACING_ON_BELT: ["IDLE"],
   },
   worker_wall: {

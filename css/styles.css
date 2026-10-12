@@ -1,16 +1,52 @@
-/* Variables de color y tipografía del portal */
+/* Variables de color y tipografía del portal.
+   La paleta es la del portafolio personal (azul eléctrico, violeta y magenta sobre un navy profundo), con los mismos
+   valores que sus tokens, para que el portal se vea como parte del mismo sitio. Es oscura por defecto y pasa a la
+   variante clara cuando el sistema de la persona prefiere el modo claro. */
 :root {
-  --color_background: #f7f7fb;
-  --color_surface: #ffffff;
-  --color_text: #1f2330;
-  --color_text_muted: #5b6172;
-  --color_accent: #4f6df5;
-  --color_accent_soft: #e8ecff;
-  --color_border: #e2e5ef;
-  --color_focus: #ff9f43;
+  --color_background: #090c14;
+  --color_surface: #10141f;
+  --color_text: #eef1fb;
+  --color_text_muted: #9aa4c4;
+  --color_text_faint: #808aab;
+  --color_accent: #4f7cff;
+  --color_accent_soft: rgba(79, 124, 255, 0.14);
+  --color_border: #232a3d;
+  --color_border_strong: #313b57;
+  --color_focus: #22d3ee;
+  /* Degradado para lo que lleva texto blanco encima (insignia, botón, logo): contraste de más de 4,6 a 1 */
+  --gradient_action: linear-gradient(135deg, #3b5fe0 0%, #9333ea 55%, #db2777 100%);
+  /* Degradado de marca para detalles sin texto encima: el título y el borde del proyecto principal */
+  --gradient_brand: linear-gradient(135deg, #4f7cff 0%, #a855f7 55%, #ec4899 100%);
+  --gradient_glow: radial-gradient(circle at 50% 0%, rgba(79, 124, 255, 0.18), transparent 60%);
+  --glow_primary: 0 0 40px rgba(79, 124, 255, 0.35);
   --radius: 16px;
-  --shadow: 0 6px 20px rgba(31, 35, 48, 0.08);
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow_hover: 0 24px 60px rgba(0, 0, 0, 0.45);
   --font_family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Hace que las barras de desplazamiento nativas también salgan oscuras */
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color_background: #f6f7fc;
+    --color_surface: #ffffff;
+    --color_text: #10142a;
+    --color_text_muted: #454e6e;
+    --color_text_faint: #5f6885;
+    --color_accent: #3457e6;
+    --color_accent_soft: rgba(52, 87, 230, 0.1);
+    --color_border: #e2e5f2;
+    --color_border_strong: #c9cee4;
+    --color_focus: #0e7490;
+    --gradient_action: linear-gradient(135deg, #3457e6 0%, #8b2fd6 55%, #cf1c72 100%);
+    --gradient_brand: linear-gradient(135deg, #3457e6 0%, #8b2fd6 55%, #cf1c72 100%);
+    --gradient_glow: radial-gradient(circle at 50% 0%, rgba(52, 87, 230, 0.1), transparent 60%);
+    --glow_primary: 0 0 40px rgba(52, 87, 230, 0.18);
+    --shadow: 0 8px 24px rgba(16, 20, 42, 0.08);
+    --shadow_hover: 0 24px 60px rgba(16, 20, 42, 0.12);
+    color-scheme: light;
+  }
 }
 
 /* Reset mínimo */
@@ -28,7 +64,7 @@ html {
 
 body {
   font-family: var(--font_family);
-  background: var(--color_background);
+  background: var(--gradient_glow) no-repeat top center, var(--color_background);
   color: var(--color_text);
   line-height: 1.5;
   min-height: 100vh;
@@ -43,7 +79,7 @@ body {
   position: absolute;
   top: -100px;
   left: 16px;
-  background: var(--color_accent);
+  background: var(--gradient_action);
   color: #ffffff;
   padding: 8px 16px;
   border-radius: 8px;
@@ -65,6 +101,12 @@ body {
   font-size: clamp(2rem, 6vw, 3rem);
   font-weight: 700;
   letter-spacing: -0.02em;
+  /* El título lleva el degradado de marca; el color liso es el respaldo si el navegador no recorta el fondo al texto */
+  color: var(--color_accent);
+  background: var(--gradient_brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .site_subtitle {
@@ -94,12 +136,13 @@ main {
   border: 1px solid var(--color_border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .project_card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 28px rgba(31, 35, 48, 0.12);
+  border-color: var(--color_border_strong);
+  box-shadow: var(--shadow_hover);
 }
 
 /* Toda la tarjeta es el enlace, para que el área de toque sea grande */
@@ -142,11 +185,19 @@ main {
   font-size: 0.95rem;
 }
 
-/* Proyecto principal: ocupa toda la fila, con su logo, su nombre y una descripción corta */
+/* Proyecto principal: ocupa toda la fila, con su logo, su nombre y una descripción corta.
+   El borde lleva el degradado de marca: el fondo liso va dentro del recuadro y el degradado detrás del borde. */
 .project_card_featured {
   grid-column: 1 / -1;
-  border-color: var(--color_accent);
-  background: linear-gradient(135deg, var(--color_accent_soft), var(--color_surface) 60%);
+  border-color: transparent;
+  background:
+    linear-gradient(var(--color_surface), var(--color_surface)) padding-box,
+    var(--gradient_brand) border-box;
+  box-shadow: var(--shadow), var(--glow_primary);
+}
+
+.project_card_featured:hover {
+  border-color: transparent;
 }
 
 .project_card_featured .project_link {
@@ -160,7 +211,7 @@ main {
   flex: none;
   width: 72px;
   height: 72px;
-  background: var(--color_accent);
+  background: var(--gradient_action);
   color: #ffffff;
   border-radius: 18px;
   font-size: 2rem;
@@ -177,7 +228,7 @@ main {
   align-self: flex-start;
   padding: 2px 10px;
   border-radius: 999px;
-  background: var(--color_accent);
+  background: var(--gradient_action);
   color: #ffffff;
   font-size: 0.75rem;
   font-weight: 600;
@@ -202,9 +253,10 @@ main {
   gap: 8px;
   padding: 10px 18px;
   border-radius: 999px;
-  background: var(--color_accent);
+  background: var(--gradient_action);
   color: #ffffff;
   font-weight: 600;
+  box-shadow: var(--glow_primary);
 }
 
 /* En celular el logo queda arriba y el texto debajo */
@@ -220,7 +272,7 @@ main {
 /* Pie de página */
 .site_footer {
   text-align: center;
-  color: var(--color_text_muted);
+  color: var(--color_text_faint);
   font-size: 0.9rem;
   padding: 40px 0 24px;
 }

@@ -5,12 +5,12 @@
 // Regla de los muros: la primera caja de un pedido que llega a la zona de muros toma una casilla libre. Si no hay ninguna, la
 // caja se queda en la banda aunque eso atasque a las que vienen detrás; el atasco se avisa pero no se resuelve solo.
 
-import { ORDER_SPIKE_FACTOR, SKU_COUNT, WALL_JAM_SECONDS, sku_floor } from "./config.js";
+import { ORDER_SPIKE_FACTOR, WALL_JAM_SECONDS } from "./config.js";
 import { Belt } from "./belts.js";
-import { DESTINATIONS, DESTINATION_WEIGHT_TOTAL } from "./catalog.js";
+import { DESTINATIONS, DESTINATION_WEIGHT_TOTAL, SKUS } from "./catalog.js";
 import { assigned_cutoff, next_cutoff_after } from "./cutoffs.js";
 import { Order, Wall, Worker } from "./entities.js";
-import { ACTIVE, floor_y, sku_anchor } from "./layout.js";
+import { ACTIVE, floor_y } from "./layout.js";
 import { project_on_path } from "./path_tools.js";
 
 const PICK_SECONDS = 1.5;
@@ -19,6 +19,12 @@ const WALK_SPEED = 1.4;
 const PICKER_HOME_OFFSET_Z = 1.3;
 // La posición donde empieza la zona de muros: antes de la primera casilla de la primera fila
 const WALL_ZONE_Z = -11.8;
+// Cuántos pedidos esperando se revisan en cada paso para soltarlos a los operarios (los demás esperan su turno)
+const RELEASE_SCAN_LIMIT = 150;
+const RELEASE_INTERVAL_SECONDS = 1;
+// Tope de pedidos de clientes esperando turno. Si la demanda supera por mucho la capacidad, la cola crecería sin fin y tras días de
+// simulación la página se volvería lenta; al llegar al tope no entran pedidos nuevos (se cuentan como rechazados y se avisa).
+const PENDING_ORDERS_LIMIT = 5000;
 
 export class OrdersSystem {
   constructor(sim) {
@@ -26,10 +32,23 @@ export class OrdersSystem {
     const { layout, paths } = sim;
 
     this.orders = [];
-    // Las líneas que esperan un operario, por piso y en orden de llegada
-    this.floor_queues = Array.from({ length: ACTIVE.floors }, () => []);
+    // Los pedidos creados que todavía no se sueltan a los operarios (esperan existencias en el activo o un lugar en los muros), en
+    // orden de llegada. Solo cuando se sueltan sus líneas pasan a la cola de los operarios.
+    this.pending = [];
+    // Las líneas de los pedidos soltados que esperan un operario: cada piso toma las de los productos que tiene en sus estantes
+    this.line_queue = [];
+    // Por producto: líneas que no han apartado caja (en pedidos esperando o en la cola), líneas en la cola, y líneas que esperan
+    // existencias en el activo (para pedir el reabasto)
+    this.unpicked_by_sku = Array(SKUS.length).fill(0);
+    this.queued_by_sku = Array(SKUS.length).fill(0);
+    this.waiting_by_sku = Array(SKUS.length).fill(0);
+    this.wanted_pickers = 0;
+    this.released_orders = [];
+    this.last_release_at = -Infinity;
     this.pickers = Array.from({ length: ACTIVE.floors }, () => []);
     this.pending_order_event = null;
+    // El e-commerce arranca apagado: sin pedidos de clientes hasta que la persona lo active
+    this.ecommerce_enabled = false;
 
     // Bandas de piso y banda principal (la espiral va incluida)
     this.main = new Belt("main_belt", "main", paths.main_chain, () => sim.belt_speed());
@@ -72,6 +91,8 @@ export class OrdersSystem {
 
   schedule_next_order(now) {
     const { sim } = this;
+    this.pending_order_event = null;
+    if (!this.ecommerce_enabled) return;
     const rate = this.order_rate_per_second();
     const interval = -Math.log(1 - sim.rng_orders.next()) / rate;
     this.pending_order_event = { time: now + interval, id: sim.events.schedule(now + interval, "order_created") };
@@ -83,41 +104,145 @@ export class OrdersSystem {
     this.schedule_next_order(now);
   }
 
+  // Enciende o apaga el e-commerce. Apagado no nacen pedidos nuevos; los que ya están en proceso terminan normalmente.
+  set_ecommerce(enabled, now) {
+    if (this.ecommerce_enabled === enabled) return;
+    this.ecommerce_enabled = enabled;
+    this.reschedule(now);
+  }
+
   on_order_event(now) {
     this.create_order(now, null);
     this.schedule_next_order(now);
   }
 
-  // Cuántas unidades de un producto se pueden pedir todavía: lo que hay en el activo (sin lo ya apartado), en la reserva, en la
-  // bodega de recibo y en camino, menos lo que ya esperan los pedidos que no han empezado a recogerse
-  orderable_boxes(sku_id) {
-    const { storage } = this.sim;
-    let pending = 0;
-    this.floor_queues[sku_floor(sku_id)].forEach((line) => {
-      if (line.sku_id === sku_id) pending += 1;
-    });
-    return storage.available(sku_id) + storage.reserve_boxes(sku_id) + storage.inbound[sku_id] + this.sim.receiving.staged_boxes_of(sku_id) - pending;
+  // La cola de pedidos esperando llegó al tope: la demanda supera lo que la bodega alcanza a atender
+  backlog_full() {
+    return this.pending.length >= PENDING_ORDERS_LIMIT;
   }
 
-  // Crea un pedido. Si no se dan los productos, se sortean entre los que hay en inventario; si no hay ninguno, no se crea nada.
+  // Cuántas cajas de un producto se pueden pedir todavía: las que hay en el activo (sin lo ya apartado), en la reserva y en camino al
+  // activo, menos lo que ya esperan los pedidos que no han apartado caja. Si un pedido pide algo que el activo no tiene pero la
+  // reserva sí, el pedido espera y se pide el reabasto de ese producto.
+  orderable_boxes(sku_id) {
+    const { storage } = this.sim;
+    return storage.available(sku_id) + storage.reserve_boxes(sku_id) + storage.inbound[sku_id] - this.unpicked_by_sku[sku_id];
+  }
+
+  // Saca un pedido de la lista cambiándolo de lugar con el último (recorrer la lista en cada pedido que sale no aguanta con miles)
+  remove_order(order) {
+    const last = this.orders.pop();
+    if (last !== order) {
+      this.orders[order.list_index] = last;
+      last.list_index = order.list_index;
+    }
+  }
+
+  // Cuántos lugares de muro hay en servicio
+  wall_slot_total() {
+    return this.walls.reduce((sum, wall) => (wall.enabled ? sum + wall.slots.filter((slot) => slot.enabled).length : sum), 0);
+  }
+
+  // Cuántos pedidos ya soltados siguen ocupando o van a ocupar una casilla de muro: los que están en picking, en consolidación o
+  // completos con casilla. Se lleva una lista aparte de los soltados (son pocos) y se limpia aquí.
+  released_count() {
+    this.released_orders = this.released_orders.filter((order) => {
+      const state = order.machine.state;
+      return state === "CREATED" || state === "PICKING" || state === "CONSOLIDATING" || (state === "COMPLETE" && order.slot);
+    });
+    return this.released_orders.length;
+  }
+
+  // Suelta a los operarios los pedidos que ya se pueden atender: todos sus productos están en el activo (sin contar lo que ya esperan
+  // las líneas de pedidos soltados) y queda un lugar en los muros para ellos. Un pedido que espera un producto que el activo no tiene
+  // no ocupa casilla con sus primeras cajas, y nunca hay más pedidos empezados que lugares en los muros: así los muros no se llenan de
+  // pedidos incompletos y la banda no se atasca por mucho que se pida. Aquí también se cuentan las líneas que esperan existencias.
+  release_orders(now) {
+    if (this.pending.length === 0) {
+      this.waiting_by_sku.fill(0);
+      return;
+    }
+    // Revisar los pedidos que esperan una vez por segundo simulado basta (y evita recorrerlos en cada paso)
+    if (now - this.last_release_at < RELEASE_INTERVAL_SECONDS) return;
+    this.last_release_at = now;
+    this.waiting_by_sku.fill(0);
+    const { storage } = this.sim;
+    const slots = this.wall_slot_total();
+    let started = this.released_count();
+    const kept = [];
+    let scanned = 0;
+    for (let index = 0; index < this.pending.length; index += 1) {
+      const order = this.pending[index];
+      if (scanned >= RELEASE_SCAN_LIMIT) {
+        for (let rest = index; rest < this.pending.length; rest += 1) kept.push(this.pending[rest]);
+        break;
+      }
+      scanned += 1;
+      const needed = new Map();
+      order.lines.forEach((line) => needed.set(line.sku_id, (needed.get(line.sku_id) || 0) + 1));
+      let in_stock = true;
+      needed.forEach((count, sku_id) => {
+        if (storage.available(sku_id) - this.queued_by_sku[sku_id] < count) in_stock = false;
+      });
+      if (!in_stock) {
+        // Las líneas que no tienen existencias en el activo esperan (y de ahí se pide el reabasto)
+        order.lines.forEach((line) => {
+          if (storage.available(line.sku_id) - this.queued_by_sku[line.sku_id] >= 1) return;
+          this.waiting_by_sku[line.sku_id] += 1;
+          if (line.machine.state === "PENDING") {
+            line.machine.go_to("WAITING_STOCK", now);
+            line.waiting_since = now;
+          }
+        });
+      }
+      if (in_stock && started < slots) {
+        started += 1;
+        order.released = true;
+        this.released_orders.push(order);
+        order.lines.forEach((line) => {
+          this.queued_by_sku[line.sku_id] += 1;
+          this.line_queue.push(line);
+        });
+      } else {
+        kept.push(order);
+      }
+    }
+    this.pending = kept;
+  }
+
+  // Crea un pedido. Si no se dan los productos, el cliente quiere unos al azar (de los que tienen lugar en el activo): el coordinador
+  // de recibo anota que se pidieron, y el pedido lleva solo los que el activo tiene; si no tiene ninguno, no se crea nada.
   create_order(now, sku_ids, replaces = null) {
     const { sim } = this;
     let skus = sku_ids;
     if (!skus) {
-      const candidates = [];
-      for (let sku = 0; sku < SKU_COUNT; sku += 1) {
-        if (this.orderable_boxes(sku) > 0) candidates.push(sku);
+      if (this.backlog_full()) {
+        sim.counters.orders_rejected += 1;
+        return null;
       }
-      if (candidates.length === 0) return null;
-      const count = Math.min(candidates.length, sim.rng_orders.int(1, sim.config.get("max_order_lines")));
-      skus = sim.rng_orders.shuffle(candidates).slice(0, count);
+      const wanted = [];
+      for (let sku = 0; sku < SKUS.length; sku += 1) {
+        // Un producto sin lugar en el activo no se puede recoger, así que no se pide
+        if (sim.storage.sku_capacity(sku) > 0) wanted.push(sku);
+      }
+      if (wanted.length === 0) return null;
+      const count = Math.min(wanted.length, sim.rng_orders.int(1, sim.config.get("max_order_lines")));
+      const chosen = sim.rng_orders.shuffle(wanted).slice(0, count);
+      chosen.forEach((sku) => sim.coordinator.register_demand(sku, now));
+      skus = chosen.filter((sku) => this.orderable_boxes(sku) > 0);
+      sim.counters.lines_unfilled += chosen.length - skus.length;
+      if (skus.length === 0) return null;
     }
     const order = new Order(sim.next_id("order"), skus, now);
     order.replaces = replaces;
     order.destination = this.pick_destination();
     this.assign_cutoff(order, now);
+    order.list_index = this.orders.length;
     this.orders.push(order);
-    order.lines.forEach((line) => this.floor_queues[sku_floor(line.sku_id)].push(line));
+    this.pending.push(order);
+    order.lines.forEach((line) => {
+      this.unpicked_by_sku[line.sku_id] += 1;
+    });
     sim.counters.orders_created += 1;
     sim.emit({ type: "order_created", order });
     return order;
@@ -167,13 +292,7 @@ export class OrdersSystem {
 
   // ---------- Stock y líneas ----------
   waiting_lines(sku_id) {
-    let total = 0;
-    for (const queue of this.floor_queues) {
-      for (const line of queue) {
-        if (line.sku_id === sku_id && line.machine.state === "WAITING_STOCK") total += 1;
-      }
-    }
-    return total;
+    return this.waiting_by_sku[sku_id];
   }
 
   // Llegó stock de un SKU: nada que hacer aquí, los operarios lo ven en su siguiente búsqueda
@@ -186,6 +305,9 @@ export class OrdersSystem {
   // ---------- Operarios de picking ----------
   sync_pickers(now) {
     const wanted = this.sim.config.get("pickers_per_floor");
+    // Con muchos operarios, revisar las listas en cada paso cuesta: solo se revisan si cambió la cantidad o si alguno se está retirando
+    if (wanted === this.wanted_pickers && !this.pickers.some((list) => list.some((worker) => worker.retiring))) return;
+    this.wanted_pickers = wanted;
     for (let floor = 0; floor < ACTIVE.floors; floor += 1) {
       const list = this.pickers[floor];
       const active = list.filter((worker) => !worker.retiring);
@@ -205,23 +327,26 @@ export class OrdersSystem {
     this.pickers[floor].push(picker);
   }
 
-  // Cada picker libre toma la primera línea de su piso que tenga stock disponible
+  // Cada picker libre toma la primera línea que tenga stock disponible en su piso
   assign_lines(now) {
     const { sim } = this;
+    const queue = this.line_queue;
+    if (queue.length === 0) return;
+    // Las líneas sin stock en ningún piso pasan a esperar (y de ahí se pide el reabasto)
+    queue.forEach((line) => {
+      if (line.machine.state === "PENDING" && sim.storage.available(line.sku_id) <= 0) {
+        line.machine.go_to("WAITING_STOCK", now);
+        line.waiting_since = now;
+      }
+    });
     for (let floor = 0; floor < ACTIVE.floors; floor += 1) {
-      const queue = this.floor_queues[floor];
-      // Las líneas sin stock pasan a esperar (y de ahí se pide el reabasto)
-      queue.forEach((line) => {
-        if (line.machine.state === "PENDING" && sim.storage.available(line.sku_id) <= 0) {
-          line.machine.go_to("WAITING_STOCK", now);
-          line.waiting_since = now;
-        }
-      });
       for (const picker of this.pickers[floor]) {
         if (picker.is_busy || picker.retiring || queue.length === 0) continue;
-        const position = queue.findIndex((line) => sim.storage.available(line.sku_id) > 0);
+        const position = queue.findIndex((line) => sim.storage.available_on_floor(line.sku_id, floor) > 0);
         if (position < 0) break;
         const line = queue.splice(position, 1)[0];
+        this.queued_by_sku[line.sku_id] -= 1;
+        this.unpicked_by_sku[line.sku_id] -= 1;
         this.start_pick(picker, line, now);
       }
     }
@@ -229,7 +354,7 @@ export class OrdersSystem {
 
   start_pick(picker, line, now) {
     const { sim } = this;
-    const box = sim.storage.reserve_box(line.sku_id);
+    const box = sim.storage.reserve_box(line.sku_id, picker.floor);
     if (line.machine.state === "WAITING_STOCK") line.waiting_since = null;
     line.box = box;
     box.line = line;
@@ -241,13 +366,12 @@ export class OrdersSystem {
     picker.current_line = line;
     picker.machine.go_to("WALKING_TO_SLOT", now);
 
-    const anchor = sku_anchor(line.sku_id);
     const belt = this.floor_belts[picker.floor];
     const belt_x = Math.min(ACTIVE.x1 - 1, Math.max(ACTIVE.x0 + 0.5, box.x));
     const belt_s = belt_x - ACTIVE.x0;
     const y = floor_y(picker.floor) + ACTIVE.slab_thickness;
     picker.start_script([
-      { do: "drive", points: [{ x: box.x, y, z: anchor.aisle_z }], speed: WALK_SPEED },
+      { do: "drive", points: [{ x: box.x, y, z: box.aisle_z }], speed: WALK_SPEED },
       { do: "call", fn: (time) => picker.machine.go_to("PICKING", time) },
       { do: "wait", seconds: PICK_SECONDS },
       {
@@ -362,20 +486,24 @@ export class OrdersSystem {
     const order = this.orders.find((candidate) => candidate.id === order_id);
     if (!order || !order.is_cancellable) return { ok: false };
     const sku_ids = order.lines.map((line) => line.sku_id);
+    this.pending = this.pending.filter((candidate) => candidate !== order);
 
     order.lines.forEach((line) => {
       // Líneas que todavía esperan un operario o stock
-      const queue = this.floor_queues[sku_floor(line.sku_id)];
-      const queued = queue.indexOf(line);
-      if (queued >= 0) queue.splice(queued, 1);
+      // Una línea que no llegó a apartar caja deja de contar como pendiente
+      if (!line.box) {
+        const queued = this.line_queue.indexOf(line);
+        if (queued >= 0) {
+          this.line_queue.splice(queued, 1);
+          this.queued_by_sku[line.sku_id] -= 1;
+        }
+        this.unpicked_by_sku[line.sku_id] -= 1;
+      }
       const box = line.box;
       if (!box) return;
       const state = box.machine.state;
-      if (state === "IN_ACTIVE") {
-        // Apartada pero todavía en su sitio: se libera el apartado
-        sim.storage.unreserve_box(box);
-      } else if (state === "PICKED") {
-        // La lleva un operario en la mano
+      if (state === "IN_ACTIVE" || state === "PICKED") {
+        // Un operario va a recogerla o ya la lleva en la mano: deja lo que hacía
         this.pickers.flat().forEach((picker) => {
           if (picker.current_line === line) {
             picker.abort_script();
@@ -385,7 +513,9 @@ export class OrdersSystem {
             if (picker.machine.state !== "IDLE") picker.machine.go_to("IDLE", now);
           }
         });
-        this.return_box(box, now);
+        // Apartada pero todavía en su sitio: se libera el apartado; en la mano: vuelve al activo
+        if (state === "IN_ACTIVE") sim.storage.unreserve_box(box);
+        else this.return_box(box, now);
       } else if (state === "ON_FLOOR_BELT" || state === "ON_MAIN_BELT") {
         if (box.belt) box.belt.remove(box);
         this.return_box(box, now);
@@ -415,7 +545,7 @@ export class OrdersSystem {
       // Es el mismo cliente: el pedido reprocesado va al mismo destino
       if (new_order) new_order.destination = order.destination;
     }
-    this.orders = this.orders.filter((candidate) => candidate !== order);
+    this.remove_order(order);
     sim.finished_orders.push(order);
     return { ok: true, order, new_order };
   }
@@ -424,13 +554,14 @@ export class OrdersSystem {
   return_box(box, now) {
     const { sim } = this;
     sim.effects.push({ type: "flash", x: box.x, y: box.y, z: box.z, born: now });
-    sim.storage.add_to_active(box, now, true);
+    sim.storage.add_to_active(box, now, box.home_floor, true);
   }
 
   // ---------- Un paso ----------
   step(now, dt) {
     this.sync_pickers(now);
     this.sync_walls();
+    this.release_orders(now);
     this.assign_lines(now);
     this.pickers.flat().forEach((picker) => picker.update(dt, now));
   }

@@ -7,7 +7,7 @@ import { SIM_START_HOUR } from "./config.js";
 export const DAY_SECONDS = 86400;
 // Un pedido que cae a MENOS de este margen antes de un corte (o justo en él) ya no sale en ese corte, sino en el siguiente
 export const CUTOFF_MARGIN_SECONDS = 3600;
-export const MAX_CUTOFFS = 8;
+export const MAX_CUTOFFS = 24;
 // 03:00, 09:00, 12:00, 18:00 y 20:00
 export const DEFAULT_CUTOFFS = [180, 540, 720, 1080, 1200];
 

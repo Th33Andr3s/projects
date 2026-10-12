@@ -1,11 +1,11 @@
-// Lo que la página recuerda entre visitas: los valores de los sliders, la configuración del patio, la semilla, la velocidad y el silencio. Va en
+// Lo que la página recuerda entre visitas: los valores de los sliders, la configuración del patio, el catálogo de mercancía, la
+// distribución del activo por piso, la velocidad y el silencio. Va en
 // `localStorage` con el nombre del proyecto como prefijo (para no pisarse con otros proyectos del mismo dominio) y toda lectura o
 // escritura va dentro de try/catch: en modo privado o con el almacenamiento bloqueado puede fallar, y la página sigue igual.
 
 import { SPEED_FACTORS } from "./config.js";
 
 const STORAGE_KEY = "warehouse_dashboard_settings";
-const SEED_MAX = 4294967295;
 
 // Devuelve lo guardado ya validado, o un objeto vacío si no hay nada o no sirve
 export function load_settings() {
@@ -17,7 +17,9 @@ export function load_settings() {
     const settings = {};
     if (data.params && typeof data.params === "object") settings.params = data.params;
     if (data.yard && typeof data.yard === "object") settings.yard = data.yard;
-    if (Number.isInteger(data.seed) && data.seed >= 0 && data.seed <= SEED_MAX) settings.seed = data.seed;
+    // El catálogo y la distribución del activo se revisan donde se usan (catalog.js y active_layout.js)
+    if (data.catalog && typeof data.catalog === "object") settings.catalog = data.catalog;
+    if (Array.isArray(data.allocation)) settings.allocation = data.allocation;
     if (SPEED_FACTORS.includes(data.speed)) settings.speed = data.speed;
     if (typeof data.muted === "boolean") settings.muted = data.muted;
     return settings;

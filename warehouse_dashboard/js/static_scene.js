@@ -17,20 +17,19 @@ import {
   build_trees,
   floor_y,
   road_segments,
-  sku_anchor,
   spiral_point,
   DISPATCH_BINS,
   PALLET_SPOTS,
   PARK_SPOTS_DOCK,
+  PARK_SPOTS_REPLEN,
   PARK_SPOTS_STOCK,
-  STAGING,
-  TOTE_STATIONS,
   UNLOAD_BAYS,
   dispatch_bin_slot,
+  staging_grid,
   staging_slot,
 } from "./layout.js";
-import { SKU_COUNT } from "./config.js";
-import { CATEGORIES, DESTINATIONS, sku_color } from "./catalog.js";
+import { CATEGORIES, DESTINATIONS, SKUS, sku_color } from "./catalog.js";
+import { build_segments, default_allocation, segment_pieces } from "./active_layout.js";
 
 const COLORS = {
   grass: "#aec59f",
@@ -75,7 +74,8 @@ function lighten(hex, amount) {
   const channels = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
   return `#${channels.map((value) => Math.round(value + (255 - value) * amount).toString(16).padStart(2, "0")).join("")}`;
 }
-const CATEGORY_TONES = CATEGORIES.map((category) => lighten(category.color, 0.7));
+// El tono suave de cada categoría para el cuadro de sus pilas (se calcula al armar la escena: el catálogo puede haber cambiado)
+const category_tones = () => CATEGORIES.map((category) => lighten(category.color, 0.7));
 
 // El tinte del piso de cada zona cubierta
 const ZONE_TINTS = {
@@ -330,7 +330,7 @@ function add_reserve_racks(collector) {
   });
 }
 
-function add_active_structure(collector) {
+function add_active_structure(collector, allocation) {
   const width = ACTIVE.x1 - ACTIVE.x0;
   const depth = ACTIVE.z1 - ACTIVE.z0;
   const center_x = (ACTIVE.x0 + ACTIVE.x1) / 2;
@@ -355,7 +355,7 @@ function add_active_structure(collector) {
         for (let x = ACTIVE.x0; x <= ACTIVE.x1 + 0.01; x += 3.5) collector.add_box(x, y + ACTIVE.slab_thickness + 0.5, z, 0.06, 1.0, 0.06, COLORS.rail_yellow);
       });
     }
-    // Dos racks por piso, con los cuatro SKU del piso en las posiciones de picking
+    // Dos racks por piso, con los productos del piso en las posiciones de picking
     [ACTIVE.rack_a_z, ACTIVE.rack_b_z].forEach((z) => {
       const base = y + ACTIVE.slab_thickness;
       for (let post = 0; post <= 14; post += 1) {
@@ -368,11 +368,13 @@ function add_active_structure(collector) {
     });
   }
 
-  // La franja de color de cada SKU sobre su tramo de rack, para reconocer qué se guarda dónde
-  for (let sku = 0; sku < SKU_COUNT; sku += 1) {
-    const anchor = sku_anchor(sku);
-    collector.add_box(anchor.x, anchor.y + ACTIVE.rack_height + 0.12, anchor.z, anchor.x1 - anchor.x0 - 0.3, 0.22, 0.34, sku_color(sku));
-  }
+  // La franja de color de cada producto sobre su tramo de rack, para reconocer qué se guarda dónde
+  build_segments(allocation).forEach((segment) => {
+    segment_pieces(segment).forEach((piece) => {
+      const length = Math.max(0.2, piece.x1 - piece.x0 - 0.2);
+      collector.add_box((piece.x0 + piece.x1) / 2, floor_y(segment.floor) + ACTIVE.slab_thickness + ACTIVE.rack_height + 0.12, piece.z, length, 0.22, 0.34, sku_color(segment.sku_id));
+    });
+  });
 }
 
 function add_elevator(collector) {
@@ -454,21 +456,21 @@ function add_dispatch(collector, layout) {
   });
 }
 
-// El taller de montacargas: una franja pegada a la pared sur con diez puestos para las de muelle a stock (naranja) y diez para las de
-// stock a racks y multinivel (azul)
+// El taller de montacargas: una franja pegada a la pared sur con diez puestos para cada flota: las de muelle a stock (naranja), las de
+// stock a reserva (azul) y las de reserva a activo (verde)
 function add_workshop(collector, layout) {
   const zone = layout.zones.find((candidate) => candidate.id === "workshop");
   const wall_color = COLORS.wall;
   collector.add_box(zone.x0, 0.6, (zone.z0 + zone.z1) / 2, 0.2, 1.2, zone.z1 - zone.z0, wall_color);
   collector.add_box(zone.x1, 0.6, (zone.z0 + zone.z1) / 2, 0.2, 1.2, zone.z1 - zone.z0, wall_color);
-  [[PARK_SPOTS_DOCK, "#fbd38d"], [PARK_SPOTS_STOCK, "#93c5fd"]].forEach(([spots, color]) => {
+  [[PARK_SPOTS_DOCK, "#fbd38d"], [PARK_SPOTS_STOCK, "#93c5fd"], [PARK_SPOTS_REPLEN, "#86efac"]].forEach(([spots, color]) => {
     spots.forEach((spot) => add_flat(collector, spot.x - 0.7, spot.x + 0.7, spot.z - 1.3, spot.z + 1.3, LAYER.marking, color, 0.02));
   });
 }
 
-// La bodega de recibo: muros bajos al sur y al este; al oeste, una pared con un hueco en cada andén por donde entran las
-// montacargas de muelle a stock; al norte queda abierta hacia el carril de las de stock a racks y multinivel. En el piso, el cuadro de
-// cada pila con el color de su categoría y los puestos de la franja de armado (pallets y cubetas).
+// La bodega de stock: muros bajos al sur y al este; al oeste, una pared con un hueco en cada andén por donde entran las
+// montacargas de muelle a stock; al norte queda abierta hacia el carril de las de stock a reserva. En el piso, el cuadro de
+// cada pila con el color de su categoría y los puestos de la franja de armado de pallets.
 function add_staging(collector, layout) {
   const zone = layout.zones.find((candidate) => candidate.id === "staging");
   const wall_color = COLORS.wall;
@@ -482,15 +484,16 @@ function add_staging(collector, layout) {
     cursor = bay.z + gap / 2;
   });
   if (zone.z1 - cursor > 0.05) collector.add_box(zone.x0, 0.6, (cursor + zone.z1) / 2, 0.2, 1.2, zone.z1 - cursor, wall_color);
-  for (let sku = 0; sku < SKU_COUNT; sku += 1) {
+  const grid = staging_grid();
+  const tones = category_tones();
+  for (let sku = 0; sku < SKUS.length; sku += 1) {
     const slot = staging_slot(sku);
-    const half_width = STAGING.pile_width / 2 + 0.25;
+    const half_width = grid.pile_width / 2 + 0.25;
     // Los cuadros no se tocan entre filas (el paso en z es 2,4 m), para que no peleen por la misma altura
-    const half_depth = STAGING.pile_depth / 2 + 0.05;
-    add_flat(collector, slot.x - half_width, slot.x + half_width, slot.z - half_depth, slot.z + half_depth, LAYER.marking, CATEGORY_TONES[sku % CATEGORY_TONES.length], 0.02);
+    const half_depth = grid.pile_depth / 2 + 0.05;
+    add_flat(collector, slot.x - half_width, slot.x + half_width, slot.z - half_depth, slot.z + half_depth, LAYER.marking, tones[SKUS[sku].category_index], 0.02);
   }
   PALLET_SPOTS.forEach((spot) => add_flat(collector, spot.x - 0.7, spot.x + 0.7, spot.z - 0.6, spot.z + 0.6, LAYER.marking, COLORS.rail_yellow, 0.02));
-  TOTE_STATIONS.forEach((spot) => add_flat(collector, spot.x - 0.65, spot.x + 0.65, spot.z - 0.5, spot.z + 0.5, LAYER.marking, "#7dd3fc", 0.02));
 }
 
 // El cuadro de cada pila de despacho en el piso, con el color suave de su región
@@ -618,7 +621,7 @@ export function build_static_scene(THREE, layout) {
   add_building_walls(collector, layout);
   add_docks_and_rails(collector, layout);
   add_reserve_racks(collector);
-  add_active_structure(collector);
+  add_active_structure(collector, layout.allocation || default_allocation());
   add_elevator(collector);
   add_spiral(collector);
   layout.belts.forEach((belt) => {

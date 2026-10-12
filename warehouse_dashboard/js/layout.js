@@ -7,7 +7,8 @@
 // Los muelles de recepción son siempre 10. Las cantidades que la persona cambia con sliders (puertas, muros, casillas,
 // estaciones) entran a `build_layout` y el diseño las acomoda; el resto es fijo.
 
-import { DOCK_COUNT, FLOOR_COUNT, PARAMETERS, SKU_COUNT, SKUS_PER_FLOOR, sku_floor } from "./config.js";
+import { DOCK_COUNT, FLOOR_COUNT, PARAMETERS } from "./config.js";
+import { SKUS } from "./catalog.js";
 import { make_path } from "./path_tools.js";
 import { Rng } from "./rng.js";
 
@@ -49,10 +50,10 @@ export const ZONES = [
   { id: "parking", label: "Parqueadero de camiones", kind: "yard", priority: 8, x0: -124, x1: -86, z0: -24, z1: 24, sign: { x: -105, z: 25, y: 7 } },
   { id: "yard", label: "Patio de recibo y muelles", kind: "yard", priority: 9, x0: -86, x1: -53, z0: -38, z1: 38, sign: { x: -70, z: -36, y: 8 } },
   { id: "receiving", label: "Recibo (rieles)", kind: "indoor", priority: 9, x0: -53, x1: -39, z0: -30, z1: 25, sign: { x: -46, z: 0, y: 5 } },
-  { id: "reserve", label: "Racks de reserva", kind: "indoor", priority: 11, x0: -39, x1: -13, z0: -30, z1: 4, sign: { x: -26, z: -23, y: 9 } },
-  { id: "active", label: "Multinivel activo", kind: "indoor", priority: 12, x0: -9, x1: 19, z0: -23, z1: -9, sign: { x: 5, z: -25, y: 19 } },
+  { id: "reserve", label: "Racks de reserva", kind: "indoor", priority: 11, x0: -39, x1: -13, z0: -30, z1: 4, sign: { x: -26, z: -23, y: 18 } },
+  { id: "active", label: "Multinivel activo", kind: "indoor", priority: 12, x0: -9, x1: 19, z0: -23, z1: -9, sign: { x: 5, z: -25, y: 29 } },
   { id: "staging", label: "Bodega de recibo (stock)", kind: "indoor", priority: 10, x0: -38, x1: -4, z0: 8, z1: 24.5, sign: { x: -21, z: 9, y: 7 } },
-  { id: "workshop", label: "Taller de montacargas", kind: "indoor", priority: 3, x0: -52, x1: -19, z0: 26, z1: 29.8, sign: { x: -35.5, z: 27.9, y: 4 } },
+  { id: "workshop", label: "Taller de montacargas", kind: "indoor", priority: 3, x0: -52, x1: -3, z0: 26, z1: 29.8, sign: { x: -27.5, z: 27.9, y: 4 } },
   { id: "walls", label: "Muros de consolidación", kind: "indoor", priority: 10, x0: 24, x1: 40, z0: -30, z1: 30, sign: { x: 38, z: -26, y: 11 } },
   { id: "packing", label: "Empaque", kind: "indoor", priority: 7, x0: 40, x1: 56, z0: -30, z1: 30, sign: { x: 53, z: -26, y: 5 } },
   { id: "dispatch", label: "Despacho y puertas", kind: "indoor", priority: 6, x0: 56, x1: 78, z0: -30, z1: 30, sign: { x: 66, z: -26, y: 10 } },
@@ -63,19 +64,28 @@ export const ZONES = [
 
 // ---- Bodega de recibo (stock) ----
 // Una sala grande al sur de los racks, pegada a los rieles de los muelles. Toda la mercancía que baja de los camiones llega aquí en
-// pallets de descarga (las montacargas de muelle a stock) y de aquí se arman los pallets y las cubetas que llevan las montacargas de
-// stock a los racks y al multinivel. Una pila por producto: una fila por categoría (el piso del activo) y una columna por producto.
-// Al norte de las pilas hay una franja de armado con los puestos de pallets y de cubetas.
+// pallets de descarga (las montacargas de muelle a stock) y de aquí se arman los pallets que llevan las montacargas de stock a los
+// racks de la reserva. Una pila por producto: una fila por categoría y una columna por producto.
+// Al norte de las pilas hay una franja de armado con los puestos de pallets.
 export const STAGING = { x0: -38, x1: -4, z0: 8, z1: 24.5, columns: 4, rows: 5, pitch_x: 8.2, pitch_z: 2.4, pile_width: 3.4, pile_depth: 2.2, first_x: -33.4, first_z: 13.2 };
-export function staging_slot(sku_id) {
-  const row = sku_id % STAGING.rows;
-  const column = Math.floor(sku_id / STAGING.rows);
-  return { x: STAGING.first_x + column * STAGING.pitch_x, z: STAGING.first_z + row * STAGING.pitch_z };
+
+// La cuadrícula de pilas según cuántos productos hay: con 20 o menos, las pilas grandes de siempre; con más, se achican para que
+// quepan hasta los 60 productos que admite el catálogo en la misma sala
+export function staging_grid(count = SKUS.length) {
+  if (count <= 20) return STAGING;
+  if (count <= 40) return { ...STAGING, columns: 8, rows: 5, pitch_x: 3.8, pile_width: 3.0 };
+  return { ...STAGING, columns: 10, rows: 6, pitch_x: 3.0, pitch_z: 1.9, pile_width: 2.5, pile_depth: 1.6 };
 }
-// La franja de armado (norte de la bodega): diez puestos de pallet y cinco de cubeta, en una sola fila
+
+export function staging_slot(sku_id, count = SKUS.length) {
+  const grid = staging_grid(count);
+  const row = sku_id % grid.rows;
+  const column = Math.floor(sku_id / grid.rows);
+  return { x: grid.first_x + column * grid.pitch_x, z: grid.first_z + row * grid.pitch_z };
+}
+// La franja de armado (norte de la bodega): diez puestos de pallet, en una sola fila
 export const ARMADO_Z = 9.4;
 export const PALLET_SPOTS = Array.from({ length: 10 }, (_, index) => ({ x: -36.6 + index * 2.1, z: ARMADO_Z }));
-export const TOTE_STATIONS = Array.from({ length: 5 }, (_, index) => ({ x: -15.6 + index * 2.1, z: ARMADO_Z }));
 // Los andenes donde las montacargas de muelle a stock descargan, sobre la pared oeste de la bodega
 export const UNLOAD_BAYS = [13.2, 15.6, 18, 20.4, 22.8].map((z) => ({ x: -36.8, z }));
 
@@ -99,7 +109,7 @@ export const RESERVE = {
   sides: 2,
   side_offset: 0.65,
   rack_depth: 1.1,
-  levels: 4,
+  levels: 10,
   level_height: 1.5,
   // Altura del primer larguero; el pallet se apoya encima
   first_level_y: 0.3,
@@ -107,14 +117,15 @@ export const RESERVE = {
 
 export const RESERVE_POSITION_COUNT = RESERVE.row_z.length * RESERVE.sides * RESERVE.bays_per_row * RESERVE.levels;
 
-// Las ubicaciones de la reserva, una por pallet, en el orden en que se van llenando: primero la fila de adelante (la que mejor
-// se ve), cara por cara, de recibo hacia el fondo, y de abajo hacia arriba en cada hueco.
+// Las ubicaciones de la reserva, una por pallet, en el orden en que se van llenando: piso por piso, de abajo hacia arriba, y en cada
+// piso de recibo hacia el fondo; en cada hueco se pasa por las ocho caras de rack seguidas, así los pallets que llegan juntos van a
+// pasillos distintos y las montacargas no hacen fila ante el mismo.
 export function reserve_positions() {
   const positions = [];
-  for (let row = RESERVE.row_z.length - 1; row >= 0; row -= 1) {
-    for (let side = 0; side < RESERVE.sides; side += 1) {
-      for (let bay = 0; bay < RESERVE.bays_per_row; bay += 1) {
-        for (let level = 0; level < RESERVE.levels; level += 1) {
+  for (let level = 0; level < RESERVE.levels; level += 1) {
+    for (let bay = 0; bay < RESERVE.bays_per_row; bay += 1) {
+      for (let row = RESERVE.row_z.length - 1; row >= 0; row -= 1) {
+        for (let side = 0; side < RESERVE.sides; side += 1) {
           positions.push({
             index: positions.length,
             row,
@@ -155,26 +166,7 @@ export function floor_y(floor) {
   return floor * ACTIVE.floor_height;
 }
 
-// Dónde se guarda un SKU en el activo: su piso (sku mod 5), el rack y el tramo de x que ocupa. Los cuatro SKU de un piso se
-// reparten así: los dos primeros en el rack de atrás y los dos últimos en el de adelante, cada uno en la mitad de la longitud.
-export function sku_anchor(sku_id) {
-  const floor = sku_floor(sku_id);
-  const order = Math.floor(sku_id / FLOOR_COUNT);
-  const length = (ACTIVE.x1 - ACTIVE.x0) / 2;
-  const column = order % 2;
-  const x0 = ACTIVE.x0 + column * length;
-  return {
-    sku_id,
-    floor,
-    x0,
-    x1: x0 + length,
-    x: x0 + length / 2,
-    y: floor_y(floor) + ACTIVE.slab_thickness,
-    z: order < SKUS_PER_FLOOR / 2 ? ACTIVE.rack_a_z : ACTIVE.rack_b_z,
-    // Dónde se para quien recoge: el pasillo, al lado del rack
-    aisle_z: order < SKUS_PER_FLOOR / 2 ? ACTIVE.belt_z - 2.8 : ACTIVE.belt_z + 2.8,
-  };
-}
+// Qué producto va en cada piso y en qué proporción lo decide la distribución del activo (active_layout.js).
 
 // ---- Elevador de cubetas y espiral ----
 export const ELEVATOR = { x: -11.5, z: -16, size: 2.2, height: ACTIVE.floors * ACTIVE.floor_height + 2.2 };
@@ -205,26 +197,26 @@ export function spiral_point(t) {
 export const TRUCK = { length: 11, width: 2.6, height: 3.4 };
 
 // ---- Red de las montacargas ----
-// De muelle a stock: un carril norte-sur pegado a los rieles (A_LANE_X) y, por el sur, el carril del taller. De stock a racks y
-// multinivel: un eje norte-sur entre la bodega y los racks (el troncal), un pasillo horizontal por cada cara de rack (el de cada
-// ubicación está en `reserve_positions`), un carril cruzado por delante de los racks, un carril al frente de la franja de armado y
-// un pasillo entre los racks y el multinivel que sube hasta el elevador.
+// De muelle a stock: un carril norte-sur pegado a los rieles (A_LANE_X) y, por el sur, el carril del taller. De stock a reserva y de
+// reserva a activo: un eje norte-sur entre la bodega y los racks (el troncal), un pasillo horizontal por cada cara de rack (el de
+// cada ubicación está en `reserve_positions`), un carril cruzado por delante de los racks, un carril al frente de la franja de
+// armado y un pasillo entre los racks y el multinivel que sube hasta el elevador.
 export const TRUNK_X = -39.3;
 export const CROSS_LANE_Z = 1.2;
 export const FRONT_LANE_Z = 6;
 export const A_LANE_X = -41.9;
 export const GARAGE_LANE_Z = 25.2;
-// El pasillo entre los racks y el multinivel: un carril para las cubetas (hacia el elevador) y otro para los pallets de reabasto
-export const TOTE_LANE_X = -12.2;
+// El pasillo entre los racks y el multinivel: por él van los pallets de reabasto hasta la mesa de desarme junto al elevador
 export const REPLEN_LANE_X = -10;
-// Donde se deja la cubeta para el elevador, y donde se deja el pallet que se va a desarmar en cubetas
+// Donde se deja la cubeta para el elevador (la deja la mesa de desarme), y donde se deja el pallet que se va a desarmar en cubetas
 export const ELEVATOR_DOOR = { x: -12.2, z: -13.8 };
 export const UNLOAD_POINT = { x: REPLEN_LANE_X, z: -8 };
 // Los puestos de pallet de descarga, al final de cada riel
 export const DOCK_ZS = spread(DOCK_COUNT, -27, 27);
-// El taller: diez puestos para las montacargas de muelle a stock y diez para las de stock a racks y multinivel, en una fila
+// El taller: diez puestos para cada flota, en una fila: las de muelle a stock, las de stock a reserva y las de reserva a activo
 export const PARK_SPOTS_DOCK = Array.from({ length: 10 }, (_, index) => ({ x: -51 + index * 1.6, z: 27.9 }));
 export const PARK_SPOTS_STOCK = Array.from({ length: 10 }, (_, index) => ({ x: -34.8 + index * 1.6, z: 27.9 }));
+export const PARK_SPOTS_REPLEN = Array.from({ length: 10 }, (_, index) => ({ x: -18.6 + index * 1.6, z: 27.9 }));
 
 // ---- Parqueadero de camiones ----
 // Dos columnas de 10 plazas a los lados de un pasillo norte-sur, con un hueco al centro para el carril de entrada. Los camiones
@@ -409,7 +401,7 @@ export function build_layout(counts = max_counts()) {
       wall_count,
       slots_per_wall,
       pack_station_count,
-      sku_count: SKU_COUNT,
+      sku_count: SKUS.length,
       reserve_positions: RESERVE_POSITION_COUNT,
     },
   };

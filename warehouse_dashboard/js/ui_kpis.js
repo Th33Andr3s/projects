@@ -1,6 +1,7 @@
 // El panel de indicadores: números en vivo de lo que pasa en la bodega. Solo se escribe en la página lo que cambió, para no
 // molestar a los lectores de pantalla ni gastar cuadros.
 
+import { FLOOR_COUNT } from "./config.js";
 import { format_duration, format_number, format_percent } from "./format.js";
 
 const SECTIONS = [
@@ -8,8 +9,10 @@ const SECTIONS = [
     title: "Recibo",
     rows: [
       { key: "trucks_received", label: "Camiones recibidos", format: format_number },
+      { key: "trucks_requested", label: "Camiones pedidos por el coordinador", format: format_number },
+      { key: "trucks_requested_urgent", label: "De ellos, urgentes", format: format_number },
       { key: "boxes_received", label: "Cajas recibidas", format: format_number },
-      { key: "staging_boxes", label: "Cajas en la bodega de recibo", format: format_number },
+      { key: "staging_boxes", label: "Cajas en la bodega de stock", format: format_number },
       { key: "trucks_parked", label: "Camiones en el parqueadero", format: format_number },
       { key: "docks_busy", label: "Muelles ocupados", format: format_number },
     ],
@@ -17,7 +20,7 @@ const SECTIONS = [
   {
     title: "Ocupación",
     rows: [
-      { key: "staging_percent", label: "Bodega de recibo", format: format_percent, bar: true },
+      { key: "staging_percent", label: "Bodega de stock", format: format_percent, bar: true },
       { key: "reserve_percent", label: "Reserva", format: format_percent, bar: true },
     ],
     floors: true,
@@ -26,11 +29,15 @@ const SECTIONS = [
     title: "Pedidos",
     rows: [
       { key: "orders_created", label: "Creados", format: format_number },
+      { key: "orders_waiting", label: "Esperando turno", format: format_number },
       { key: "orders_picking", label: "En picking", format: format_number },
       { key: "orders_consolidating", label: "En consolidación", format: format_number },
       { key: "orders_packed", label: "Empacados", format: format_number },
       { key: "orders_dispatched", label: "Despachados", format: format_number },
+      { key: "orders_delivered", label: "Entregados al cliente", format: format_number },
       { key: "orders_cancelled", label: "Cancelados", format: format_number },
+      { key: "orders_rejected", label: "Rechazados por cola llena", format: format_number },
+      { key: "lines_unfilled", label: "Líneas pedidas sin existencias", format: format_number },
       { key: "cycle_average_seconds", label: "Tiempo de ciclo promedio", format: format_duration },
     ],
   },
@@ -43,7 +50,7 @@ const SECTIONS = [
       { key: "trucks_dispatched", label: "Camiones despachados", format: format_number },
       { key: "cutoffs_run", label: "Cortes cumplidos", format: format_number },
       { key: "late_shipments", label: "Envíos tardíos", format: format_number },
-      { key: "otd_percent", label: "OTD (entrega a tiempo)", format: format_percent },
+      { key: "otd_percent", label: "OTD (entregas a tiempo)", format: format_percent },
     ],
   },
 ];
@@ -89,7 +96,7 @@ export function build_kpi_panel(body) {
     });
 
     if (section.floors) {
-      for (let floor = 0; floor < 5; floor += 1) {
+      for (let floor = 0; floor < FLOOR_COUNT; floor += 1) {
         const wrapper = document.createElement("div");
         wrapper.className = "kpi_row";
         const term = document.createElement("dt");

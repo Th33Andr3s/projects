@@ -7,10 +7,13 @@ import { SPEED_FACTORS } from "./config.js";
 import { CATEGORIES } from "./catalog.js";
 import { MAX_MANUAL_TRUCKS } from "./truck_schedule.js";
 import { build_alerts, build_disruptions } from "./ui_alerts.js";
+import { build_catalog_panel } from "./ui_catalog.js";
 import { build_dispatch_panel } from "./ui_dispatch.js";
+import { build_economy_panel } from "./ui_economy.js";
 import { build_inspector } from "./ui_inspector.js";
 import { build_inventory_panel } from "./ui_inventory.js";
 import { build_kpi_panel } from "./ui_kpis.js";
+import { build_map_panel } from "./ui_map.js";
 import { build_params_panel } from "./ui_params.js";
 import { build_yard_panel } from "./ui_yard.js";
 
@@ -21,7 +24,6 @@ const QUALITY_NOTICE_MILLISECONDS = 10000;
 const WHEEL_HINT_MILLISECONDS = 2500;
 // Lo que debe asomar de las secciones para considerarlas a la vista (px)
 const SECTIONS_VISIBLE_MARGIN = 24;
-const SEED_MAX = 4294967295;
 const TEXT_INPUT_TYPES = new Set(["text", "number", "search", "email", "url", "tel", "password"]);
 
 function by_id(id) {
@@ -52,9 +54,9 @@ export function create_ui(config, yard, handlers) {
   const clock_display = by_id("clock_display");
   const nav_clock = by_id("nav_clock");
   const nav_alerts = by_id("nav_alerts");
-  const seed_input = by_id("seed_input");
   const reset_button = by_id("reset_button");
   const mute_button = by_id("mute_button");
+  const ecommerce_button = by_id("ecommerce_button");
   const fps_badge = by_id("fps_badge");
   const live_status = by_id("live_status");
   const scene_message = by_id("scene_message");
@@ -88,6 +90,53 @@ export function create_ui(config, yard, handlers) {
   function sections_visible() {
     return window.scrollY + window.innerHeight > hero.offsetHeight + SECTIONS_VISIBLE_MARGIN;
   }
+
+  // ---- Sección activa en la barra de secciones ----
+  // Marca con aria-current el enlace de la sección que va ocupando la pantalla (la última cuyo borde superior ya pasó por debajo de la
+  // barra) y, si la barra se desplaza de lado (pantallas angostas), deja ese enlace a la vista. Se calcula en el desplazamiento, pero a
+  // lo más una vez por cuadro.
+  const section_nav = by_id("section_nav");
+  const nav_links = [...section_nav.querySelectorAll(".nav_link")]
+    .map((link) => ({ link, target: document.getElementById(link.getAttribute("href").slice(1)) }))
+    .filter((entry) => entry.target);
+  let nav_frame = 0;
+  let active_nav_link = null;
+  function update_active_section() {
+    nav_frame = 0;
+    // En escritorio la barra es lateral (no tapa lo de arriba); en pantallas angostas es una banda arriba y hay que descontarla
+    const is_sidebar = window.getComputedStyle(section_nav).position === "fixed";
+    const threshold = (is_sidebar ? 0 : section_nav.offsetHeight) + SECTIONS_VISIBLE_MARGIN * 2;
+    const at_bottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+    let active = nav_links[0];
+    nav_links.forEach((entry) => {
+      if (entry.target.getBoundingClientRect().top <= threshold) active = entry;
+    });
+    // Una sección final corta nunca llegaría arriba: al llegar al fondo de la página se da por activa la última
+    if (at_bottom) active = nav_links[nav_links.length - 1];
+    if (!active || active.link === active_nav_link) return;
+    active_nav_link = active.link;
+    nav_links.forEach((entry) => {
+      if (entry.link === active.link) entry.link.setAttribute("aria-current", "true");
+      else entry.link.removeAttribute("aria-current");
+    });
+    // Solo se mueve la barra (no la página): el enlace activo se deja a la vista dentro de ella, de lado o hacia arriba y abajo
+    const nav_box = section_nav.getBoundingClientRect();
+    const link_box = active.link.getBoundingClientRect();
+    const behavior = reduced_motion_query.matches ? "auto" : "smooth";
+    if (is_sidebar) {
+      if (link_box.top < nav_box.top || link_box.bottom > nav_box.bottom) {
+        section_nav.scrollTo({ top: section_nav.scrollTop + link_box.top - nav_box.top - (nav_box.height - link_box.height) / 2, behavior });
+      }
+    } else if (link_box.left < nav_box.left || link_box.right > nav_box.right) {
+      section_nav.scrollTo({ left: section_nav.scrollLeft + link_box.left - nav_box.left - (nav_box.width - link_box.width) / 2, behavior });
+    }
+  }
+  function schedule_active_section() {
+    if (!nav_frame) nav_frame = window.requestAnimationFrame(update_active_section);
+  }
+  window.addEventListener("scroll", schedule_active_section, { passive: true });
+  window.addEventListener("resize", schedule_active_section);
+  update_active_section();
 
   // ---- Leyenda ----
   function set_legend_open(open) {
@@ -125,6 +174,10 @@ export function create_ui(config, yard, handlers) {
   const send_trucks_input = by_id("send_trucks_input");
   by_id("send_trucks_form").addEventListener("submit", (event) => {
     event.preventDefault();
+    if (yard.arrivals_blocked) {
+      announce("Las llegadas de camiones están detenidas: reanúdalas en Patio y muelles para hacer llegar camiones.");
+      return;
+    }
     const count = Math.round(Number(send_trucks_input.value));
     if (!Number.isFinite(count) || count < 1) {
       announce("Escribe cuántos camiones quieres que lleguen, de 1 en adelante.");
@@ -136,49 +189,21 @@ export function create_ui(config, yard, handlers) {
   });
 
   // ---- Reinicio con confirmación ----
-  function read_seed() {
-    const seed = Number(seed_input.value);
-    return seed_input.value.trim() !== "" && Number.isInteger(seed) && seed >= 0 && seed <= SEED_MAX ? seed : null;
-  }
-
-  // `empty_inventory`: además de volver al inicio, deja en 0 los rellenos iniciales de la reserva y del activo
-  let pending_empty_inventory = false;
-  function ask_reset(empty_inventory = false) {
-    const seed = read_seed();
-    if (seed === null) {
-      announce("La semilla debe ser un número entero entre 0 y 4.294.967.295.");
-      seed_input.focus();
-      return;
-    }
-    pending_empty_inventory = empty_inventory;
-    const active_fill = config.get("initial_active_fill");
-    const reserve_fill = config.get("initial_reserve_fill");
-    if (empty_inventory) {
-      reset_text.textContent = `Se vacía todo el inventario y se vuelve al inicio con la semilla ${seed}: el reloj, los camiones y los pedidos empiezan de nuevo, y los rellenos iniciales quedan en 0. La configuración del patio se conserva.`;
-    } else {
-      reset_text.textContent = `Se vuelve al inicio con la semilla ${seed} y se pierde el avance actual. La configuración del patio se conserva.`;
-      // Si los parámetros de inicio dejan stock, el inventario no empieza en cero: se avisa
-      if (active_fill > 0 || reserve_fill > 0) {
-        reset_text.textContent += ` Ojo: los parámetros de inicio dejan el activo al ${active_fill} % y la reserva al ${reserve_fill} %, así que el inventario no empezará en cero (usa «Reiniciar inventario» para dejarlo en 0).`;
-      }
-    }
+  function ask_reset() {
+    reset_text.textContent = "Se vuelve al inicio y se pierde el avance actual: el inventario empieza en cero, el e-commerce queda apagado y el azar de camiones y pedidos es otro. Los parámetros y la configuración del patio se conservan.";
     // Si la corrida ya despachó pedidos, se ofrece bajar su KPI OTD antes de perderlo
     const has_otd = Boolean(current_sim) && dispatch_panel.has_deliveries(current_sim);
     by_id("reset_otd_label").hidden = !has_otd;
     reset_dialog.showModal();
   }
 
-  reset_button.addEventListener("click", () => ask_reset(false));
-  by_id("reset_inventory_button").addEventListener("click", () => ask_reset(true));
+  reset_button.addEventListener("click", () => ask_reset());
+  ecommerce_button.addEventListener("click", () => handlers.on_toggle_ecommerce());
   by_id("reset_cancel_button").addEventListener("click", () => reset_dialog.close());
   by_id("reset_confirm_button").addEventListener("click", () => {
-    const seed = read_seed();
     reset_dialog.close();
     if (current_sim && !by_id("reset_otd_label").hidden && by_id("reset_otd_check").checked) dispatch_panel.download_otd(current_sim);
-    if (seed !== null) handlers.on_reset(seed, pending_empty_inventory);
-  });
-  seed_input.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") ask_reset(false);
+    handlers.on_reset();
   });
   by_id("shortcuts_button").addEventListener("click", () => shortcuts_dialog.showModal());
   by_id("factory_reset_button").addEventListener("click", () => handlers.on_factory_reset());
@@ -237,10 +262,11 @@ export function create_ui(config, yard, handlers) {
   // ---- Secciones ----
   const yard_panel = build_yard_panel(by_id("yard_body"), yard, { on_send_trucks: (count) => handlers.on_send_trucks(count) });
   const inventory_panel = build_inventory_panel(by_id("inventory_body"));
+  const economy_panel = build_economy_panel(by_id("economy_body"));
   const dispatch_panel = build_dispatch_panel(by_id("dispatch_body"), yard);
-  build_params_panel(config, by_id("params_body"), {
-    on_needs_restart: (parameter) => announce(`${parameter.label}: se aplica al reiniciar.`),
-  });
+  const map_panel = build_map_panel(by_id("map_body"));
+  const catalog_panel = build_catalog_panel(by_id("catalog_body"), config, handlers.merchandise);
+  build_params_panel(config, by_id("params_body"));
   const kpi_panel = build_kpi_panel(by_id("kpis_body"));
   const inspector = build_inspector(
     {
@@ -248,6 +274,7 @@ export function create_ui(config, yard, handlers) {
       problem_list: by_id("problem_list"),
       problem_empty: by_id("problem_empty"),
       search: by_id("entity_search"),
+      group: by_id("entity_group"),
       count: by_id("entity_count"),
       list: by_id("entity_list"),
     },
@@ -291,11 +318,14 @@ export function create_ui(config, yard, handlers) {
     kpi_panel.update(sim.get_kpis());
     disruptions.update(sim);
     inspector.update(sim);
+    catalog_panel.update(sim);
     yard_panel.update(sim);
     dispatch_panel.update(sim);
+    map_panel.update(sim);
     if (force || real_milliseconds - last_inventory_refresh >= INVENTORY_REFRESH_MILLISECONDS) {
       last_inventory_refresh = real_milliseconds;
       inventory_panel.update(sim);
+      economy_panel.update(sim);
     }
     if (force || real_milliseconds - last_list_refresh >= LIST_REFRESH_MILLISECONDS) {
       last_list_refresh = real_milliseconds;
@@ -320,7 +350,7 @@ export function create_ui(config, yard, handlers) {
 
   document.addEventListener("keydown", (event) => {
     if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-    if (reset_dialog.open || shortcuts_dialog.open || cancel_dialog.open || mass_cancel_dialog.open) return;
+    if (reset_dialog.open || shortcuts_dialog.open || cancel_dialog.open || mass_cancel_dialog.open || by_id("merch_dialog").open) return;
     if (event.key === "Escape") {
       if (close_floating()) event.preventDefault();
       return;
@@ -338,7 +368,7 @@ export function create_ui(config, yard, handlers) {
     else if (key === "f") handlers.on_toggle_fps();
     else if (key === "r") {
       event.preventDefault();
-      ask_reset(false);
+      ask_reset();
     } else if (key === "?") shortcuts_dialog.showModal();
     else if (/^[1-9]$/.test(key) && Number(key) <= SPEED_FACTORS.length) handlers.on_speed(SPEED_FACTORS[Number(key) - 1]);
   });
@@ -369,8 +399,10 @@ export function create_ui(config, yard, handlers) {
     set_muted(muted) {
       mute_button.setAttribute("aria-pressed", String(muted));
     },
-    set_seed(seed) {
-      seed_input.value = String(seed);
+    // El interruptor del e-commerce: encendido deja nacer pedidos de clientes, apagado no
+    set_ecommerce(enabled) {
+      ecommerce_button.setAttribute("aria-pressed", String(enabled));
+      ecommerce_button.querySelector("span").textContent = enabled ? "E-commerce encendido" : "E-commerce apagado";
     },
     set_fps_visible(visible) {
       fps_badge.hidden = !visible;
@@ -422,6 +454,7 @@ export function create_ui(config, yard, handlers) {
     },
     // Al reiniciar la simulación todo lo anterior deja de existir
     reset_panels(sim) {
+      map_panel.reset();
       alerts.clear();
       inspector.show(null, sim.now);
       selection_card.hidden = true;
