@@ -142,6 +142,81 @@ main {
   font-size: 0.95rem;
 }
 
+/* Proyecto principal: ocupa toda la fila, con su logo, su nombre y una descripción corta */
+.project_card_featured {
+  grid-column: 1 / -1;
+  border-color: var(--color_accent);
+  background: linear-gradient(135deg, var(--color_accent_soft), var(--color_surface) 60%);
+}
+
+.project_card_featured .project_link {
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+  padding: 28px 32px;
+}
+
+.project_icon_featured {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  background: var(--color_accent);
+  color: #ffffff;
+  border-radius: 18px;
+  font-size: 2rem;
+}
+
+.project_text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project_badge {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--color_accent);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project_card_featured .project_name {
+  margin-top: 4px;
+  font-size: clamp(1.25rem, 3vw, 1.6rem);
+}
+
+.project_card_featured .project_description {
+  max-width: 60ch;
+  font-size: 1rem;
+}
+
+.project_action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--color_accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* En celular el logo queda arriba y el texto debajo */
+@media (max-width: 599px) {
+  .project_card_featured .project_link {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 24px;
+  }
+}
+
 /* Pie de página */
 .site_footer {
   text-align: center;
