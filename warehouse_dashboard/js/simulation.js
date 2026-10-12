@@ -10,14 +10,18 @@ import {
   ACTIVE_SKU_CAPACITY,
   SIM_STEP_SECONDS,
   SKU_COUNT,
-  sku_name,
 } from "./config.js";
 import { EventQueue } from "./event_queue.js";
 import { Rng } from "./rng.js";
 import { build_belt_paths } from "./layout.js";
-import { Box, Pallet } from "./entities.js";
+import { sku_label, sku_name } from "./catalog.js";
+import { build_gate_lanes } from "./gates.js";
+import { Inventory } from "./inventory.js";
+import { format_sim_datetime } from "./format.js";
+import { Box, Pallet, step_clock } from "./entities.js";
 import { Disruptions } from "./disruptions.js";
 import { ReceivingSystem } from "./sim_receiving.js";
+import { DockFleet } from "./sim_dock_fleet.js";
 import { StorageSystem } from "./sim_storage.js";
 import { OrdersSystem } from "./sim_orders.js";
 import { OutboundSystem } from "./sim_outbound.js";
@@ -29,17 +33,24 @@ const FLASH_SECONDS = 1.2;
 const FINISHED_ORDERS_KEPT = 300;
 
 export class Simulation {
-  constructor(config, layout, seed) {
+  // `yard` es la configuración del patio (camiones por franja, muelles, prioridades, restricciones) y `start_ms` el instante
+  // real (UTC) que corresponde a las 6 de la mañana del primer día, para escribir fechas
+  constructor(config, yard, layout, seed, start_ms) {
     this.config = config;
+    this.yard = yard;
     this.layout = layout;
     this.seed = seed;
+    this.start_ms = start_ms;
     this.paths = build_belt_paths(layout);
     this.now = 0;
     this.steps = 0;
 
     const root = new Rng(seed);
     this.rng_trucks = root.fork("camiones");
-    this.rng_cargo = root.fork("carga");
+    this.rng_agenda = root.fork("agenda");
+    this.rng_destinations = root.fork("destinos");
+    this.rng_order_destinations = root.fork("destinos_pedidos");
+    this.rng_routes = root.fork("viajes");
     this.rng_split = root.fork("reparto");
     this.rng_orders = root.fork("pedidos");
     this.rng_pack = root.fork("empaque");
@@ -57,7 +68,9 @@ export class Simulation {
       orders_dispatched: 0,
       orders_cancelled: 0,
       trucks_dispatched: 0,
-      empty_departures: 0,
+      cutoffs_run: 0,
+      late_shipments: 0,
+      orders_on_time: 0,
       cycle_time_total: 0,
       cycle_count: 0,
     };
@@ -76,12 +89,20 @@ export class Simulation {
     this.slow_timer = 0;
     this.reschedule_orders = false;
 
+    this.gates = build_gate_lanes();
     this.disruptions = new Disruptions(this);
+    this.inventory = new Inventory(this);
     this.receiving = new ReceivingSystem(this);
     this.storage = new StorageSystem(this);
+    this.dock_fleet = new DockFleet(this);
     this.orders = new OrdersSystem(this);
     this.outbound = new OutboundSystem(this);
 
+    // Si la persona cambia las horas de corte, el próximo paso reprograma el corte que viene
+    this.reschedule_cutoffs = false;
+    this.unsubscribe_yard = yard.subscribe((kind) => {
+      if (kind === "cutoffs" || kind === "reset") this.reschedule_cutoffs = true;
+    });
     this.unsubscribe = config.subscribe((key) => {
       if (key === "orders_per_minute" || key === "max_order_lines") this.reschedule_orders = true;
     });
@@ -93,9 +114,15 @@ export class Simulation {
 
   dispose() {
     this.unsubscribe();
+    this.unsubscribe_yard();
   }
 
   // ---------- Servicios para los sistemas ----------
+  // Las dos flotas de montacargas juntas: las de muelle a stock y las de stock a racks y multinivel
+  get forklifts() {
+    return [...this.dock_fleet.forklifts, ...this.storage.forklifts];
+  }
+
   next_id(kind) {
     this.ids[kind] = (this.ids[kind] || 0) + 1;
     return this.ids[kind];
@@ -106,7 +133,22 @@ export class Simulation {
   }
 
   sku_label(sku_id) {
-    return sku_name(sku_id);
+    return sku_label(sku_id);
+  }
+
+  // La fecha de un momento de la simulación como AAAA-MM-DD (para los archivos que se descargan)
+  format_iso_date(seconds) {
+    return new Date(this.start_ms + seconds * 1000).toISOString().slice(0, 10);
+  }
+
+  // La fecha y hora de un momento como AAAA-MM-DD HH:MM
+  format_iso_datetime(seconds) {
+    return new Date(this.start_ms + seconds * 1000).toISOString().slice(0, 16).replace("T", " ");
+  }
+
+  // La fecha y hora (con el día) de un momento de la simulación, para los camiones y la programación
+  format_time(seconds) {
+    return format_sim_datetime(this.start_ms, seconds);
   }
 
   new_box(sku_id, now) {
@@ -139,10 +181,11 @@ export class Simulation {
     const active_fill = config.get("initial_active_fill") / 100;
     const reserve_fill = config.get("initial_reserve_fill") / 100;
     // Las cajas del relleno inicial recorren los estados que tendrían si hubieran llegado por un camión
-    const to_receiving = (box) => ["ON_RAIL", "AT_RECEIVING"].forEach((state) => box.machine.go_to(state, 0));
+    const to_receiving = (box) => ["ON_RAIL", "ON_DOCK_PALLET", "IN_STAGING"].forEach((state) => box.machine.go_to(state, 0));
 
     for (let sku = 0; sku < SKU_COUNT; sku += 1) {
-      const wanted = Math.round(ACTIVE_SKU_CAPACITY * active_fill) + rng_init.int(-2, 2);
+      // Con el activo en cero (lo normal al empezar) no queda ni una caja suelta por el redondeo
+      const wanted = active_fill === 0 ? 0 : Math.round(ACTIVE_SKU_CAPACITY * active_fill) + rng_init.int(-2, 2);
       const count = Math.min(ACTIVE_SKU_CAPACITY, Math.max(0, wanted));
       for (let index = 0; index < count; index += 1) {
         const box = this.new_box(sku, 0);
@@ -174,17 +217,14 @@ export class Simulation {
   // ---------- Un paso ----------
   handle_event(event, now) {
     switch (event.type) {
-      case "truck_arrival":
-        this.receiving.on_truck_arrival(now);
+      case "truck_spawn":
+        this.receiving.on_truck_spawn(event.payload.entry, now);
         break;
       case "order_created":
         this.orders.on_order_event(now);
         break;
-      case "dispatch_departure":
-        this.outbound.on_departure_event(event.payload.door_index, now);
-        break;
-      case "dispatch_truck":
-        this.outbound.on_replacement_event(event.payload.door_index, now);
+      case "dispatch_cutoff":
+        this.outbound.on_cutoff_event(now);
         break;
       case "spike_end":
         this.disruptions.on_spike_end(now);
@@ -199,7 +239,12 @@ export class Simulation {
     const dt = SIM_STEP_SECONDS;
     this.now = now;
     this.steps += 1;
+    step_clock.current = this.steps;
 
+    if (this.reschedule_cutoffs) {
+      this.reschedule_cutoffs = false;
+      this.outbound.reschedule_cutoffs(now);
+    }
     if (this.reschedule_orders) {
       this.reschedule_orders = false;
       this.orders.reschedule(now);
@@ -209,8 +254,10 @@ export class Simulation {
 
     this.receiving.step(now, dt);
     this.storage.step(now, dt);
+    this.dock_fleet.step(now, dt);
     this.orders.step(now, dt);
     this.outbound.step(now, dt);
+    Object.values(this.gates).forEach((lane) => lane.update(dt));
     this.receiving.trucks.forEach((truck) => truck.update(dt, now));
     this.receiving.docks.forEach((dock) => dock.rail.update(dt, now));
     this.orders.update_belts(dt, now);
@@ -229,8 +276,8 @@ export class Simulation {
 
   // Lo que no hace falta calcular en cada paso: utilizaciones y alertas
   slow_update(now) {
-    const { storage, outbound, utilization } = this;
-    storage.forklifts.forEach((forklift) => {
+    const { outbound, utilization } = this;
+    this.forklifts.forEach((forklift) => {
       utilization.forklift_total += SLOW_UPDATE_SECONDS;
       if (forklift.is_busy && forklift.machine.state !== "MAINTENANCE") utilization.forklift_busy += SLOW_UPDATE_SECONDS;
     });
@@ -249,6 +296,10 @@ export class Simulation {
 
     if (storage.find_free_reserve_index() < 0 && (this.receiving.ready_pallets().length > 0 || this.receiving.forming_pallets.length > 0)) {
       alerts.push({ key: "reserve_full", severity: "warn", text: "Reserva llena: los pallets esperan en recibo." });
+    }
+
+    if (this.receiving.parked_count === this.receiving.bays.length) {
+      alerts.push({ key: "parking_full", severity: "warn", text: "Parqueadero lleno: los camiones esperan en la carretera." });
     }
 
     // Una caja que se mueve por una banda que corre es avance para su pedido
@@ -275,7 +326,7 @@ export class Simulation {
 
     for (let sku = 0; sku < SKU_COUNT; sku += 1) {
       const waiting = orders.waiting_lines(sku);
-      if (waiting > 0 && storage.available(sku) <= 0 && storage.reserve_boxes(sku) === 0 && storage.inbound[sku] === 0) {
+      if (waiting > 0 && storage.available(sku) <= 0 && storage.reserve_boxes(sku) === 0 && storage.inbound[sku] === 0 && this.receiving.staged_boxes_of(sku) === 0) {
         alerts.push({ key: `no_stock_${sku}`, severity: "warn", text: `${sku_name(sku)} sin stock en ningún lado: ${waiting} ${waiting === 1 ? "línea espera" : "líneas esperan"} reposición.` });
       }
     }
@@ -302,6 +353,21 @@ export class Simulation {
 
   cancel_order(order_id, reprocess) {
     return this.orders.cancel_order(order_id, reprocess, this.now);
+  }
+
+  // Los pedidos que se pueden cancelar: todos, o solo los que están con problema (bloqueados o esperando casilla)
+  cancellable_orders(scope) {
+    const source = scope === "problems" ? this.problem_orders() : this.orders.orders;
+    return source.filter((order) => order.is_cancellable);
+  }
+
+  // Cancelación masiva. Devuelve cuántos pedidos se cancelaron.
+  cancel_orders(scope) {
+    let cancelled = 0;
+    this.cancellable_orders(scope).forEach((order) => {
+      if (this.cancel_order(order.id, false).ok) cancelled += 1;
+    });
+    return cancelled;
   }
 
   // ---------- Lo que lee la interfaz ----------
@@ -347,7 +413,13 @@ export class Simulation {
       forklift_utilization: utilization.forklift_total > 0 ? Math.round((utilization.forklift_busy / utilization.forklift_total) * 100) : 0,
       packer_utilization: utilization.packer_total > 0 ? Math.round((utilization.packer_busy / utilization.packer_total) * 100) : 0,
       trucks_dispatched: counters.trucks_dispatched,
-      empty_departures: counters.empty_departures,
+      cutoffs_run: counters.cutoffs_run,
+      late_shipments: counters.late_shipments,
+      otd_percent: counters.orders_dispatched > 0 ? Math.round((counters.orders_on_time / counters.orders_dispatched) * 100) : null,
+      staging_boxes: this.receiving.staging.length,
+      staging_percent: Math.round((this.receiving.staging.length / Math.max(1, this.receiving.staging_capacity())) * 100),
+      trucks_parked: this.receiving.parked_count,
+      docks_busy: this.receiving.docks.filter((dock) => dock.truck).length,
     };
   }
 

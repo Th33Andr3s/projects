@@ -2,7 +2,7 @@
 // de pantalla) y lo que busca el cuadro de búsqueda. Son funciones puras sobre la simulación.
 
 import { normalize_search_text } from "./format.js";
-import { sku_name } from "./config.js";
+import { sku_label, sku_name } from "./catalog.js";
 
 // Cuántos resultados se muestran como máximo: una lista de miles de cajas no sirve para nadie
 export const MAX_LIST_ITEMS = 120;
@@ -16,7 +16,10 @@ export function list_entities(sim) {
   const items = [];
   sim.receiving.trucks.forEach((truck) => items.push(item("Camiones", truck, `Camión de recibo ${truck.id}`, truck.machine.label)));
   sim.outbound.trucks.forEach((truck) => items.push(item("Camiones", truck, `Camión de despacho ${truck.id}`, truck.machine.label)));
-  sim.storage.forklifts.forEach((forklift) => items.push(item("Montacargas", forklift, `Montacargas ${forklift.id}`, forklift.machine.label)));
+  sim.forklifts.forEach((forklift) => {
+    const fleet = forklift.fleet === "dock" ? "muelle a stock" : "stock a racks y multinivel";
+    items.push(item("Montacargas", forklift, `Montacargas ${forklift.id} (${fleet})`, forklift.machine.label));
+  });
   sim.orders.pickers.flat().forEach((worker) => items.push(item("Personas", worker, `Operario de picking ${worker.id} (piso ${worker.floor + 1})`, worker.machine.label)));
   sim.outbound.operators.forEach((worker) => items.push(item("Personas", worker, `Operario de muro ${worker.id}`, worker.machine.label)));
   sim.outbound.packers.forEach((worker) => items.push(item("Personas", worker, `Empacador ${worker.id}`, worker.machine.label)));
@@ -37,6 +40,12 @@ export function list_entities(sim) {
     });
   });
   sim.outbound.stations.forEach((station) => items.push(item("Empaque", station, `Estación ${station.index + 1}`, station.enabled ? station.machine.label : "Cerrada")));
+  sim.receiving.stacks.forEach((stack) => {
+    if (stack.boxes > 0) items.push(item("Bodega de recibo", stack, `Pila de ${sku_label(stack.sku_id)}`, `${stack.boxes} cajas`));
+  });
+  sim.outbound.bins.forEach((bin) => {
+    if (bin.parcels.length > 0) items.push(item("Despacho por destino", bin, `Pila de ${bin.destination.text}`, `${bin.parcels.length} pedidos`));
+  });
   items.push(item("Elevador", sim.storage.elevator, "Elevador de cubetas", sim.storage.elevator.machine.label));
   return items;
 }

@@ -9,11 +9,17 @@ const SECTIONS = [
     rows: [
       { key: "trucks_received", label: "Camiones recibidos", format: format_number },
       { key: "boxes_received", label: "Cajas recibidas", format: format_number },
+      { key: "staging_boxes", label: "Cajas en la bodega de recibo", format: format_number },
+      { key: "trucks_parked", label: "Camiones en el parqueadero", format: format_number },
+      { key: "docks_busy", label: "Muelles ocupados", format: format_number },
     ],
   },
   {
     title: "Ocupación",
-    rows: [{ key: "reserve_percent", label: "Reserva", format: format_percent, bar: true }],
+    rows: [
+      { key: "staging_percent", label: "Bodega de recibo", format: format_percent, bar: true },
+      { key: "reserve_percent", label: "Reserva", format: format_percent, bar: true },
+    ],
     floors: true,
   },
   {
@@ -35,7 +41,9 @@ const SECTIONS = [
       { key: "forklift_utilization", label: "Uso de montacargas", format: format_percent },
       { key: "packer_utilization", label: "Uso de empacadores", format: format_percent },
       { key: "trucks_dispatched", label: "Camiones despachados", format: format_number },
-      { key: "empty_departures", label: "Salidas vacías", format: format_number },
+      { key: "cutoffs_run", label: "Cortes cumplidos", format: format_number },
+      { key: "late_shipments", label: "Envíos tardíos", format: format_number },
+      { key: "otd_percent", label: "OTD (entrega a tiempo)", format: format_percent },
     ],
   },
 ];

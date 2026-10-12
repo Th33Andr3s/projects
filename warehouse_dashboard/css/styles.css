@@ -1,5 +1,6 @@
-/* Simulador de centro de distribución. Tema oscuro: el lienzo 3D ocupa toda la ventana y la interfaz flota encima en
-   paneles de vidrio oscuro. Acento cian para lo activo, ámbar para el foco, rojo para alertas, verde para lo completo. */
+/* Simulador de centro de distribución. Tema oscuro: la primera pantalla es solo la bodega en 3D, con la barra de controles flotando
+   encima, y todo lo demás (patio y muelles, inventario, parámetros...) está más abajo, con scroll. Acento cian para lo activo,
+   ámbar para el foco, rojo para alertas, verde para lo completo. */
 
 :root {
   --bg: #0b1220;
@@ -20,9 +21,10 @@
   --radius: 12px;
   --control_size: 40px;
   --gap: 8px;
-  /* Los fija ui.js según lo que mide la barra superior; estos son valores de respaldo */
-  --top_space: 64px;
-  --bottom_space: 84px;
+  /* Alto de la barra de secciones, para que al saltar a una sección no quede tapada */
+  --nav_height: 56px;
+  /* Espacio que dejan el botón de bajar y el pie de la bodega, para que los paneles flotantes no los tapen */
+  --hero_bottom: 64px;
 }
 
 * {
@@ -31,8 +33,11 @@
 
 html,
 body {
-  height: 100%;
   margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -41,11 +46,11 @@ body {
   font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: 1rem;
   line-height: 1.4;
-  overflow: hidden;
 }
 
 h1,
 h2,
+h3,
 p {
   margin: 0;
 }
@@ -83,9 +88,17 @@ p {
   outline-offset: 2px;
 }
 
-/* ---- Escena ---- */
+/* ---- Primera pantalla: la bodega ---- */
+.hero {
+  position: relative;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 420px;
+  overflow: hidden;
+}
+
 .scene_container {
-  position: fixed;
+  position: absolute;
   inset: 0;
 }
 
@@ -127,7 +140,7 @@ p {
 
 /* ---- Barra superior ---- */
 .top_bar {
-  position: fixed;
+  position: absolute;
   top: 8px;
   left: 8px;
   right: 8px;
@@ -154,8 +167,7 @@ p {
 }
 
 .icon_button,
-.text_button,
-.dock_button {
+.text_button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,15 +184,13 @@ p {
 }
 
 .icon_button:hover,
-.text_button:hover,
-.dock_button:hover {
+.text_button:hover {
   background: rgba(34, 211, 238, 0.12);
   border-color: var(--accent);
 }
 
 .icon_button:active,
-.text_button:active,
-.dock_button:active {
+.text_button:active {
   background: rgba(34, 211, 238, 0.22);
 }
 
@@ -285,120 +295,111 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Barra inferior ---- */
-.dock {
-  position: fixed;
-  left: 50%;
-  bottom: 28px;
-  z-index: 20;
+/* ---- Barra de secciones ---- */
+.section_nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   display: flex;
-  gap: 6px;
-  max-width: calc(100% - 16px);
-  padding: 6px;
-  transform: translateX(-50%);
-  border: 1px solid var(--border_soft);
-  border-radius: var(--radius);
-  background: var(--panel);
+  align-items: center;
+  gap: 4px;
+  min-height: var(--nav_height);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border_soft);
+  background: var(--panel_solid);
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
-.dock_button[aria-expanded="true"] {
-  background: rgba(34, 211, 238, 0.18);
-  border-color: var(--accent);
+.nav_link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: var(--control_size);
+  padding: 0 12px;
+  border-radius: 10px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav_link:hover {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--accent);
+}
+
+.nav_link_scene {
+  border: 1px solid var(--border_strong);
+}
+
+.nav_status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.nav_clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.nav_alerts {
+  padding: 4px 10px;
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  color: var(--danger);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.nav_alerts[hidden] {
+  display: none;
+}
+
+/* ---- Secciones de abajo ---- */
+.page_sections {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 16px 16px 8px;
+}
+
+.page_section {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid var(--border_soft);
+  border-radius: var(--radius);
+  background: var(--panel_solid);
+  scroll-margin-top: calc(var(--nav_height) + 8px);
+}
+
+.page_section > h2 {
+  margin-bottom: 4px;
+  font-size: 1.3rem;
+}
+
+.section_intro {
+  max-width: 70ch;
+  margin-bottom: 14px;
+  color: var(--text_muted);
 }
 
 .copyright {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10;
-  padding: 3px 8px;
-  background: rgba(11, 18, 32, 0.88);
+  padding: 8px 8px 16px;
   color: var(--text_muted);
   font-size: 0.8rem;
   text-align: center;
-}
-
-/* ---- Cajones ---- */
-.drawer {
-  position: fixed;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border_strong);
-  border-radius: var(--radius);
-  background: var(--panel);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-  visibility: hidden;
-  opacity: 0;
-  /* Al cerrar, la visibilidad se retrasa lo que dura la animación; al abrir es inmediata, para poder enfocar el cajón al instante */
-  transition: transform 0.2s ease, opacity 0.2s ease, visibility 0s linear 0.2s;
-}
-
-.drawer.is_open {
-  visibility: visible;
-  opacity: 1;
-  transform: none;
-  transition-delay: 0s;
-}
-
-.drawer_header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 8px 8px 14px;
-  border-bottom: 1px solid var(--border_soft);
-}
-
-.drawer_header h2 {
-  font-size: 1.05rem;
-}
-
-.drawer_body {
-  flex: 1;
-  padding: 14px;
-  overflow-y: auto;
 }
 
 .placeholder {
   color: var(--text_muted);
 }
 
-/* Pantallas anchas: parámetros a la izquierda, indicadores a la derecha, inspección abajo al centro */
-.drawer_left {
-  left: 8px;
-  top: calc(var(--top_space) + 8px);
-  bottom: var(--bottom_space);
-  width: 320px;
-  transform: translateX(-24px);
-}
-
-.drawer_right {
-  right: 8px;
-  top: calc(var(--top_space) + 8px);
-  bottom: var(--bottom_space);
-  width: 320px;
-  transform: translateX(24px);
-}
-
-.drawer_center {
-  left: 50%;
-  bottom: var(--bottom_space);
-  width: min(380px, calc(100% - 16px));
-  max-height: min(62vh, calc(100dvh - var(--top_space) - var(--bottom_space) - 16px));
-  margin-left: calc(min(380px, 100% - 16px) / -2);
-  transform: translateY(24px);
-}
-
 /* ---- Contenido de los paneles ---- */
-.drawer_footer {
-  padding: 8px 14px;
-  border-top: 1px solid var(--border_soft);
-}
-
-.drawer_body h3,
-.panel_section h3 {
+.page_section h3,
+.yard_card h3,
+.selection_card h3 {
   margin: 0 0 8px;
   font-size: 0.8125rem;
   letter-spacing: 0.04em;
@@ -406,15 +407,28 @@ p {
   color: var(--text_muted);
 }
 
-.drawer_body h4 {
+.selection_details h4 {
   margin: 0 0 6px;
   font-size: 1rem;
 }
 
 .param_group,
-.kpi_group,
-.panel_section {
-  margin-bottom: 18px;
+.kpi_group {
+  padding: 12px 14px;
+  border: 1px solid var(--border_soft);
+  border-radius: 10px;
+}
+
+.params_grid,
+.kpis_grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.params_grid + .text_button {
+  margin-top: 14px;
 }
 
 .param_row {
@@ -525,6 +539,20 @@ p {
   list-style: none;
 }
 
+.inspector_columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+#entity_list,
+#problem_list {
+  max-height: 460px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
 .list_heading {
   margin-top: 8px;
   color: var(--text_muted);
@@ -597,8 +625,8 @@ p {
 
 .disruption_list {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 8px;
-  margin-top: 10px;
 }
 
 .disruption_button {
@@ -635,15 +663,16 @@ p {
   font-size: 0.8125rem;
 }
 
-/* ---- Avisos sobre la escena ---- */
+/* ---- Paneles que flotan sobre la bodega ---- */
 .alert_stack {
-  position: fixed;
-  top: calc(var(--top_space) + 8px);
+  position: absolute;
   left: 50%;
+  bottom: var(--hero_bottom);
   z-index: 40;
   display: grid;
   gap: 6px;
-  width: min(380px, calc(100% - 16px));
+  width: min(420px, calc(100% - 760px));
+  min-width: 260px;
   transform: translateX(-50%);
   /* Los huecos dejan pasar el arrastre al lienzo */
   pointer-events: none;
@@ -700,14 +729,16 @@ p {
   flex-wrap: wrap;
 }
 
-/* ---- Leyenda y avisos ---- */
+/* ---- Leyenda ---- */
 .legend_panel {
-  position: fixed;
+  position: absolute;
   left: 8px;
-  bottom: calc(var(--bottom_space) + 36px);
+  bottom: var(--hero_bottom);
   z-index: 25;
   width: min(340px, calc(100% - 16px));
+  max-height: calc(100% - 140px);
   padding: 12px 14px;
+  overflow-y: auto;
   border: 1px solid var(--border_strong);
   border-radius: var(--radius);
   background: var(--panel);
@@ -723,7 +754,7 @@ p {
 }
 
 .legend_list,
-.sku_legend {
+.category_legend {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -732,7 +763,7 @@ p {
 }
 
 .legend_list li,
-.sku_legend li {
+.category_legend li {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -744,10 +775,9 @@ p {
   font-size: 0.875rem;
 }
 
-.sku_legend {
-  grid-template-columns: repeat(3, 1fr);
+.category_legend {
+  grid-template-columns: repeat(2, 1fr);
   font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
 }
 
 .swatch {
@@ -770,9 +800,15 @@ p {
   background: var(--danger);
 }
 
+/* Camión: cabezote azul cielo y contenedor blanco */
+.swatch_truck {
+  background: linear-gradient(90deg, #7dd3fc 0 38%, #ffffff 38%);
+}
+
 .fps_badge {
-  position: fixed;
+  position: absolute;
   left: 8px;
+  bottom: 12px;
   z-index: 25;
   padding: 4px 10px;
   border: 1px solid var(--border_soft);
@@ -782,12 +818,102 @@ p {
   font-variant-numeric: tabular-nums;
 }
 
-.fps_badge {
-  bottom: var(--bottom_space);
-}
-
 .fps_badge[hidden] {
   display: none;
+}
+
+.scene_hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--hero_bottom) + 8px);
+  z-index: 45;
+  max-width: calc(100% - 16px);
+  padding: 8px 14px;
+  transform: translateX(-50%);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--panel_solid);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.scene_hint[hidden] {
+  display: none;
+}
+
+/* Lo que se elige con un clic en la escena */
+.selection_card {
+  position: absolute;
+  right: 8px;
+  bottom: var(--hero_bottom);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: min(350px, calc(100% - 16px));
+  max-height: calc(100% - 150px);
+  border: 1px solid var(--border_strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.selection_card[hidden] {
+  display: none;
+}
+
+.selection_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-bottom: 1px solid var(--border_soft);
+}
+
+.selection_header h2 {
+  font-size: 1.05rem;
+}
+
+.selection_details {
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+
+/* El botón para bajar a las secciones */
+.scroll_button {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 26;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control_size);
+  padding: 0 16px;
+  transform: translateX(-50%);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--panel_solid);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.scroll_button:hover {
+  background: rgba(34, 211, 238, 0.18);
+}
+
+.scroll_button i {
+  animation: nudge 1.8s ease-in-out infinite;
+}
+
+@keyframes nudge {
+  0%,
+  100% {
+    transform: translateY(-2px);
+  }
+  50% {
+    transform: translateY(3px);
+  }
 }
 
 /* ---- Diálogos ---- */
@@ -848,29 +974,273 @@ kbd {
   text-align: center;
 }
 
-/* ---- Pantallas estrechas ---- */
-@media (max-width: 1099px) {
-  /* Los tres paneles se vuelven cajones que suben desde abajo */
-  .drawer_left,
-  .drawer_right,
-  .drawer_center {
-    left: 8px;
-    right: 8px;
-    top: auto;
-    bottom: var(--bottom_space);
-    width: auto;
-    max-height: min(62vh, calc(100dvh - var(--top_space) - var(--bottom_space) - 16px));
-    margin-left: 0;
-    transform: translateY(24px);
-  }
+/* ---- Patio y muelles ---- */
+.yard_grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
-@media (max-width: 1099px) {
+.yard_card {
+  padding: 12px 14px;
+  border: 1px solid var(--border_soft);
+  border-radius: 10px;
+}
+
+.note {
+  margin-top: 8px;
+  color: var(--text_muted);
+  font-size: 0.8125rem;
+}
+
+.slot_fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.slot_field {
+  display: grid;
+  gap: 2px;
+  font-size: 0.875rem;
+}
+
+.slot_field small {
+  color: var(--text_muted);
+}
+
+.number_input,
+.table_select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--border_strong);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.number_input {
+  height: var(--control_size);
+  font-variant-numeric: tabular-nums;
+}
+
+.yard_total {
+  margin-top: 10px;
+}
+
+.yard_total_value {
+  color: var(--accent);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.dock_grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(112px, 100%), 1fr));
+  gap: 6px;
+}
+
+.dock_toggle {
+  display: grid;
+  gap: 2px;
+  min-height: var(--control_size);
+  padding: 6px 8px;
+  border: 1px solid var(--ok);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dock_toggle:hover {
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.dock_state {
+  color: var(--text_muted);
+  font-size: 0.8125rem;
+}
+
+.dock_toggle.is_busy {
+  background: rgba(34, 211, 238, 0.14);
+  border-color: var(--accent);
+}
+
+.dock_toggle.is_blocked {
+  border-style: dashed;
+  border-color: var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.priority_list {
+  display: grid;
+  gap: 6px;
+}
+
+.priority_field {
+  display: grid;
+  grid-template-columns: auto 1fr minmax(96px, 120px);
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9375rem;
+}
+
+.parking_summary {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.parking_list {
+  max-height: 150px;
+  margin: 0;
+  padding-left: 0;
+  overflow-y: auto;
+  list-style: none;
+  color: var(--text_muted);
+  font-size: 0.8125rem;
+}
+
+.table_title {
+  margin: 18px 0 8px;
+}
+
+.table_toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin-bottom: 8px;
+}
+
+.table_toolbar .note {
+  margin-top: 0;
+}
+
+.table_filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table_scroll {
+  max-height: 520px;
+  overflow: auto;
+  border: 1px solid var(--border_soft);
+  border-radius: 10px;
+}
+
+.data_table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.data_table th,
+.data_table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border_soft);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data_table .table_select {
+  min-width: 8.5rem;
+}
+
+.data_table .cell_arrival,
+.data_table .cell_slot {
+  white-space: nowrap;
+}
+
+.data_table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel_solid);
+  color: var(--text_muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.data_table td .swatch,
+.data_table th .swatch {
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: -3px;
+}
+
+.data_table .group_row th,
+.data_table .group_row td {
+  background: rgba(34, 211, 238, 0.07);
+  font-weight: 700;
+}
+
+.data_table .sku_cell {
+  padding-left: 26px;
+  font-weight: 400;
+}
+
+.inventory_table {
+  min-width: 900px;
+}
+
+.inventory_totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.inventory_total {
+  padding: 10px 12px;
+  border: 1px solid var(--border_soft);
+  border-radius: 10px;
+}
+
+.inventory_total dt {
+  color: var(--text_muted);
+  font-size: 0.875rem;
+}
+
+.inventory_total_value {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Pantallas estrechas ---- */
+@media (max-width: 899px) {
+  /* Los paneles flotantes ocupan el ancho y se apilan: la tarjeta abajo y los avisos justo encima */
   .alert_stack {
     left: 8px;
-    width: auto;
     right: 8px;
+    width: auto;
+    min-width: 0;
     transform: none;
+  }
+
+  .selection_card {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-height: 42dvh;
+  }
+
+  .hero:has(.selection_card:not([hidden])) .alert_stack {
+    bottom: calc(var(--hero_bottom) + 42dvh + 8px);
+  }
+
+  .legend_panel {
+    max-height: 46dvh;
   }
 }
 
@@ -889,6 +1259,24 @@ kbd {
   .top_group {
     padding: 4px;
     gap: 4px;
+  }
+
+  /* En el celular solo la simulación y la semilla quedan en la barra; la vista y la ayuda bajan a los lados, justo debajo de
+     ella (se anclan al borde inferior de la barra, así que siguen sus cambios de alto), para dejar más bodega a la vista */
+  .top_group:nth-child(3),
+  .top_group:nth-child(4) {
+    position: absolute;
+    top: calc(100% + 8px);
+  }
+
+  .top_group:nth-child(3) {
+    right: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .top_group:nth-child(4) {
+    left: 0;
   }
 
   .seed_input {
@@ -910,19 +1298,12 @@ kbd {
     font-size: 0.9375rem;
   }
 
-  .dock_button {
-    padding: 0;
-    width: var(--control_size);
+  .page_sections {
+    padding: 10px 8px 4px;
   }
 
-  /* En el celular los botones de la barra inferior son solo icono, pero siguen teniendo su nombre para lectores de pantalla */
-  .dock_button span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+  .page_section {
+    padding: 12px;
   }
 
   .shortcut_list div {
@@ -931,14 +1312,18 @@ kbd {
   }
 }
 
-/* Con puntero táctil, los controles miden al menos 44 px */
 @media (max-width: 399px) {
   /* El icono del reloj sobra: la hora ya se entiende sola */
   .clock i {
     display: none;
   }
+
+  .nav_clock {
+    display: none;
+  }
 }
 
+/* Con puntero táctil, los controles miden al menos 44 px */
 @media (pointer: coarse) {
   :root {
     --control_size: 44px;
@@ -946,7 +1331,197 @@ kbd {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .drawer {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .scroll_button i {
+    animation: none;
+  }
+
+  .bar_fill {
     transition: none;
   }
+}
+
+/* ---- Llegada inmediata de camiones ---- */
+.send_trucks_input {
+  width: 4.5rem;
+}
+
+.send_now_form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+
+.send_now_form .slot_field {
+  flex: 1 1 8rem;
+}
+
+.section_actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 14px;
+}
+
+.section_actions .note {
+  flex: 1 1 18rem;
+  margin-top: 0;
+}
+
+.text_button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.text_button:disabled:hover {
+  background: transparent;
+  border-color: var(--border_strong);
+}
+
+/* ---- Despachos ---- */
+.gate_toggle {
+  width: 100%;
+}
+
+.cutoff_list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.result_chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 1px solid var(--border_strong);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.result_ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.result_warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.result_danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---- Horas de corte ---- */
+.cutoff_editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.cutoff_item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.time_input {
+  flex: 1;
+  min-width: 0;
+  height: var(--control_size);
+  padding: 0 8px;
+  border: 1px solid var(--border_strong);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color-scheme: dark;
+}
+
+.cutoff_controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.next_cutoff_line {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.download_buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.check_label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.check_label input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+/* ---- Resumen del inventario ---- */
+.inventory_summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.inventory_card {
+  padding: 10px 12px;
+  border: 1px solid var(--border_soft);
+  border-radius: 10px;
+}
+
+.inventory_card_main {
+  border-color: var(--accent);
+}
+
+.inventory_card h3 {
+  margin: 0 0 4px;
+}
+
+.inventory_card_value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory_card_units,
+.inventory_card_capacity {
+  color: var(--text_muted);
+  font-size: 0.8125rem;
+}
+
+.inventory_card .bar_track {
+  margin-top: 6px;
+}
+
+/* Siete velocidades caben en la barra: botones un poco más angostos */
+.speed_label {
+  min-width: 40px;
+  padding: 0 4px;
 }

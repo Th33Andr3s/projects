@@ -8,21 +8,42 @@ import {
   BELT_HEIGHT,
   BUILDING,
   BUILDING_WALL_HEIGHT,
+  COMPOUND,
   ELEVATOR,
+  GATES,
   RESERVE,
-  SITE,
   SPIRAL,
+  WORLD,
+  build_trees,
   floor_y,
+  road_segments,
   sku_anchor,
   spiral_point,
+  DISPATCH_BINS,
+  PALLET_SPOTS,
+  PARK_SPOTS_DOCK,
+  PARK_SPOTS_STOCK,
+  STAGING,
+  TOTE_STATIONS,
+  UNLOAD_BAYS,
+  dispatch_bin_slot,
+  staging_slot,
 } from "./layout.js";
-import { SKU_COUNT, sku_color } from "./config.js";
+import { SKU_COUNT } from "./config.js";
+import { CATEGORIES, DESTINATIONS, sku_color } from "./catalog.js";
 
 const COLORS = {
-  ground: "#aeb6c1",
+  grass: "#aec59f",
+  compound: "#a9b0ba",
   indoor_floor: "#e4e8ee",
-  yard: "#8b929c",
-  road: "#6b727d",
+  yard: "#848b96",
+  road: "#5f6671",
+  fence: "#cfd6df",
+  fence_post: "#6b7788",
+  canopy: "#dbe3ec",
+  trunk: "#7c5a3a",
+  leaves_dark: "#2f7a43",
+  leaves_light: "#3f8f4f",
   road_line: "#e8ecf1",
   customers: "#c5d8c9",
   wall: "#f5f7fa",
@@ -48,19 +69,28 @@ const COLORS = {
   grid: "#ffffff",
 };
 
+// El color suave del cuadro de cada pila en el piso de la bodega de recibo: el de su categoría
+// (mezclado con blanco para que no compita con las pilas)
+function lighten(hex, amount) {
+  const channels = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
+  return `#${channels.map((value) => Math.round(value + (255 - value) * amount).toString(16).padStart(2, "0")).join("")}`;
+}
+const CATEGORY_TONES = CATEGORIES.map((category) => lighten(category.color, 0.7));
+
 // El tinte del piso de cada zona cubierta
 const ZONE_TINTS = {
   receiving: "#d7e5f6",
   reserve: "#efe4d2",
   active: "#dbe9df",
   workshop: "#f0dcdc",
+  staging: "#f6efd2",
   walls: "#e2dcf1",
   packing: "#d8e8ec",
   dispatch: "#ece8d4",
 };
 
 // Alturas de las capas del piso, de abajo hacia arriba, para que nada parpadee al superponerse
-const LAYER = { ground: 0, slab: 0.05, zone: 0.08, marking: 0.1 };
+const LAYER = { ground: 0, road: 0.03, compound: 0.04, slab: 0.05, zone: 0.08, marking: 0.1 };
 const LAYER_THICKNESS = 0.05;
 
 function add_flat(collector, x0, x1, z0, z1, top, color, thickness = LAYER_THICKNESS) {
@@ -121,45 +151,143 @@ function add_belt_path(collector, points, width = 0.9) {
 }
 
 function add_terrain(collector, layout) {
-  add_flat(collector, SITE.x0, SITE.x1, SITE.z0, SITE.z1, LAYER.ground, COLORS.ground, 0.2);
-  // El interior del edificio
+  const half = WORLD.half_size;
+  add_flat(collector, -half, half, -half, half, LAYER.ground, COLORS.grass, 0.2);
+
+  // Carreteras con su línea central discontinua: salen de la pantalla en cualquier equipo
+  road_segments().forEach((road) => {
+    add_flat(collector, road.x0, road.x1, road.z0, road.z1, LAYER.road, COLORS.road, 0.03);
+    if (road.axis === "x") {
+      const center = (road.z0 + road.z1) / 2;
+      for (let x = road.x0 + 3; x < road.x1 - 3; x += 5) add_flat(collector, x, x + 2.4, center - 0.12, center + 0.12, LAYER.road + 0.01, COLORS.road_line, 0.01);
+    } else {
+      const center = (road.x0 + road.x1) / 2;
+      for (let z = road.z0 + 3; z < road.z1 - 3; z += 5) add_flat(collector, center - 0.12, center + 0.12, z, z + 2.4, LAYER.road + 0.01, COLORS.road_line, 0.01);
+    }
+  });
+
+  // El predio: un rectángulo de asfalto, con el edificio adentro
+  add_flat(collector, COMPOUND.x0, COMPOUND.x1, COMPOUND.z0, COMPOUND.z1, LAYER.compound, COLORS.compound);
   add_flat(collector, BUILDING.x0, BUILDING.x1, BUILDING.z0, BUILDING.z1, LAYER.slab, COLORS.indoor_floor);
 
   layout.zones.forEach((zone) => {
     if (zone.kind === "yard") add_flat(collector, zone.x0, zone.x1, zone.z0, zone.z1, LAYER.zone, COLORS.yard);
-    else if (zone.kind === "road") add_flat(collector, zone.x0, zone.x1, zone.z0, zone.z1, LAYER.zone, COLORS.road);
     else if (ZONE_TINTS[zone.id]) add_flat(collector, zone.x0, zone.x1, zone.z0, zone.z1, LAYER.zone, ZONE_TINTS[zone.id]);
   });
+}
 
-  // Línea discontinua al centro de las vías
-  [
-    [-90, -75],
-    [98, 105],
-  ].forEach(([from, to]) => {
-    for (let x = from + 1; x < to - 1; x += 3) add_flat(collector, x, x + 1.6, -0.12, 0.12, LAYER.marking + 0.01, COLORS.road_line, 0.02);
+// Las plazas del parqueadero de camiones: dos rayas largas y una de fondo por plaza
+function add_parking(collector, layout) {
+  layout.parking_bays.forEach((bay) => {
+    const half_length = 6;
+    const half_width = 1.7;
+    const back = bay.yaw === 0 ? bay.x - half_length : bay.x + half_length;
+    add_flat(collector, bay.x - half_length, bay.x + half_length, bay.z - half_width - 0.06, bay.z - half_width + 0.06, LAYER.marking, COLORS.road_line, 0.02);
+    add_flat(collector, bay.x - half_length, bay.x + half_length, bay.z + half_width - 0.06, bay.z + half_width + 0.06, LAYER.marking, COLORS.road_line, 0.02);
+    add_flat(collector, back - 0.06, back + 0.06, bay.z - half_width, bay.z + half_width, LAYER.marking, COLORS.road_line, 0.02);
   });
-  // Carril de entrada y de salida pintados sobre los patios, hasta los muelles y las puertas
-  add_flat(collector, -75, -62, -0.12, 0.12, LAYER.marking, COLORS.road_line, 0.02);
-  add_flat(collector, 86, 98, -0.12, 0.12, LAYER.marking, COLORS.road_line, 0.02);
+}
+
+// La valla de alambre que cierra el predio: postes, cinco hilos y un larguero arriba
+function add_fence_run(collector, axis, fixed, start, end) {
+  const height = 2.4;
+  const wire_levels = [0.35, 0.8, 1.25, 1.7, 2.15];
+  const length = end - start;
+  if (length < 0.5) return;
+  const middle = (start + end) / 2;
+  const post_count = Math.max(2, Math.round(length / 4) + 1);
+  for (let index = 0; index < post_count; index += 1) {
+    const at = start + (length * index) / (post_count - 1);
+    if (axis === "x") collector.add_box(at, height / 2, fixed, 0.14, height, 0.14, COLORS.fence_post);
+    else collector.add_box(fixed, height / 2, at, 0.14, height, 0.14, COLORS.fence_post);
+  }
+  wire_levels.forEach((level) => {
+    if (axis === "x") collector.add_box(middle, level, fixed, length, 0.03, 0.03, COLORS.fence);
+    else collector.add_box(fixed, level, middle, 0.03, 0.03, length, COLORS.fence);
+  });
+  if (axis === "x") collector.add_box(middle, height, fixed, length, 0.08, 0.08, COLORS.fence_post);
+  else collector.add_box(fixed, height, middle, 0.08, 0.08, length, COLORS.fence_post);
+}
+
+// El predio queda sellado por todos lados; solo se abren los huecos de las dos garitas (a los lados del eje, 8 m)
+function add_fence(collector) {
+  const gap = 8;
+  add_fence_run(collector, "x", COMPOUND.z0, COMPOUND.x0, COMPOUND.x1);
+  add_fence_run(collector, "x", COMPOUND.z1, COMPOUND.x0, COMPOUND.x1);
+  add_fence_run(collector, "z", COMPOUND.x0, COMPOUND.z0, -gap);
+  add_fence_run(collector, "z", COMPOUND.x0, gap, COMPOUND.z1);
+  add_fence_run(collector, "z", COMPOUND.x1, COMPOUND.z0, -gap);
+  add_fence_run(collector, "z", COMPOUND.x1, gap, COMPOUND.z1);
+}
+
+// Las garitas estilo peaje: una isleta con la caseta entre los dos carriles, un techo sobre ambos y la base de cada talanquera
+// (la barrera que sube y baja la dibuja scene_entities.js, porque se mueve)
+function add_gates(collector) {
+  Object.values(GATES).forEach((gate) => {
+    collector.add_box(gate.x, 0.1, 0, 16, 0.2, 2.8, COLORS.wall_cap);
+    collector.add_box(gate.x, 1.5, 0, 3.2, 2.8, 2.0, COLORS.wall);
+    collector.add_box(gate.x, 1.9, 1.02, 2.4, 0.9, 0.06, COLORS.bumper);
+    collector.add_box(gate.x, 1.9, -1.02, 2.4, 0.9, 0.06, COLORS.bumper);
+    collector.add_box(gate.x, 3.0, 0, 3.6, 0.25, 2.4, COLORS.amber);
+    // Techo del peaje sobre los dos carriles
+    collector.add_box(gate.x, 5.4, 0, 10, 0.3, 17, COLORS.canopy);
+    collector.add_box(gate.x, 5.25, 8.4, 10, 0.1, 0.3, COLORS.amber);
+    collector.add_box(gate.x, 5.25, -8.4, 10, 0.1, 0.3, COLORS.amber);
+    [-4, 4].forEach((dx) => [-8, 8].forEach((dz) => collector.add_box(gate.x + dx, 2.6, dz, 0.3, 5.2, 0.3, COLORS.steel)));
+    [
+      [gate.in_lane_z, gate.in_stop_x],
+      [gate.out_lane_z, gate.out_stop_x],
+    ].forEach(([lane_z, stop_x]) => {
+      collector.add_box(gate.x, 0.55, Math.sign(lane_z) * 1.5, 0.3, 1.1, 0.3, COLORS.bumper);
+      // Raya de pare un poco antes de la talanquera, del lado por donde llega el camión
+      const stop_line = gate.x + (stop_x < gate.x ? -1.4 : 1.4);
+      add_flat(collector, stop_line - 0.2, stop_line + 0.2, lane_z - 1.6, lane_z + 1.6, LAYER.marking, COLORS.road_line, 0.02);
+    });
+  });
+}
+
+// Los árboles: un solo modelo (tronco y dos copas) repetido por el terreno, cada uno con su tamaño y su tono de verde
+function build_trees_mesh(THREE) {
+  const parts = new PartCollector(THREE);
+  parts.add_cylinder(0, 1.0, 0, 0.22, 0.3, 2.0, COLORS.trunk, 6);
+  parts.add_cylinder(0, 3.0, 0, 0.1, 1.7, 2.8, COLORS.leaves_dark, 8);
+  parts.add_cylinder(0, 4.7, 0, 0.05, 1.2, 2.4, COLORS.leaves_light, 8);
+  const trees = build_trees();
+  const mesh = new THREE.InstancedMesh(parts.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }), trees.length);
+  const dummy = new THREE.Object3D();
+  const tint = new THREE.Color();
+  trees.forEach((tree, index) => {
+    dummy.position.set(tree.x, 0, tree.z);
+    dummy.scale.set(tree.scale, tree.scale, tree.scale);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(index, dummy.matrix);
+    tint.setRGB(tree.tint, tree.tint, tree.tint);
+    mesh.setColorAt(index, tint);
+  });
+  mesh.name = "trees";
+  mesh.frustumCulled = false;
+  return mesh;
 }
 
 function add_customers(collector, layout) {
   const zone = layout.zones.find((candidate) => candidate.id === "customers");
-  collector.add_box((zone.x0 + zone.x1) / 2, 0.15, (zone.z0 + zone.z1) / 2, zone.x1 - zone.x0, 0.3, zone.z1 - zone.z0, COLORS.customers);
+  const center_x = (zone.x0 + zone.x1) / 2;
+  const center_z = (zone.z0 + zone.z1) / 2;
+  collector.add_box(center_x, 0.15, center_z, zone.x1 - zone.x0, 0.3, zone.z1 - zone.z0, COLORS.customers);
   // Casitas: cada pedido web nace sobre una de ellas
-  [-16, -8, 0, 8, 16].forEach((x, index) => {
-    const z = -43 + (index % 2 === 0 ? 1.5 : -1.5);
-    collector.add_box(x, 1.5, z, 3.6, 2.4, 3.2, COLORS.house);
-    collector.add_box(x, 3.0, z, 4.2, 0.5, 3.8, COLORS.roof);
+  [-16, -8, 0, 8, 16].forEach((dx, index) => {
+    const z = center_z + (index % 2 === 0 ? 1.5 : -1.5);
+    collector.add_box(center_x + dx, 1.5, z, 3.6, 2.4, 3.2, COLORS.house);
+    collector.add_box(center_x + dx, 3.0, z, 4.2, 0.5, 3.8, COLORS.roof);
   });
-  // Camino punteado desde los clientes hasta la bodega
-  for (let z = -34; z <= -31; z += 1.5) collector.add_box(0, 0.12, z, 0.5, 0.04, 0.6, COLORS.road_line);
+  // Camino punteado desde los clientes hasta la valla del predio
+  for (let z = zone.z1 + 2; z <= COMPOUND.z0 - 1; z += 2) collector.add_box(center_x, 0.12, z, 0.5, 0.04, 0.8, COLORS.road_line);
 }
 
 function add_building_walls(collector, layout) {
   add_wall_run(collector, "x", BUILDING.z0, BUILDING.x0, BUILDING.x1, [], 0);
   add_wall_run(collector, "x", BUILDING.z1, BUILDING.x0, BUILDING.x1, [], 0);
-  add_wall_run(collector, "z", BUILDING.x0, BUILDING.z0, BUILDING.z1, layout.docks.map((dock) => dock.z), 4.6);
+  add_wall_run(collector, "z", BUILDING.x0, BUILDING.z0, BUILDING.z1, layout.docks.map((dock) => dock.z), 4.2);
   add_wall_run(collector, "z", BUILDING.x1, BUILDING.z0, BUILDING.z1, layout.doors.map((door) => door.z), 4.6);
 }
 
@@ -179,12 +307,9 @@ function add_docks_and_rails(collector, layout) {
     [-0.65, 0.65].forEach((offset) => {
       collector.add_beam([from[0], from[1] + 0.1, from[2] + offset], [to[0], to[1] + 0.1, to[2] + offset], 0.08, 0.16, COLORS.belt_rail);
     });
-    // Mesa de recibo al pie del riel
-    collector.add_box(dock.rail_end.x + 1.1, 0.45, dock.z, 2.0, 0.9, 2.2, COLORS.table);
-    collector.add_box(dock.rail_end.x + 1.1, 0.93, dock.z, 2.1, 0.06, 2.3, COLORS.table_top);
+    // El puesto del pallet de descarga, al pie del riel
+    add_flat(collector, dock.pallet_spot.x - 0.8, dock.pallet_spot.x + 0.8, dock.z - 0.75, dock.z + 0.75, LAYER.marking, COLORS.rail_yellow, 0.02);
   });
-  // Líneas de la cola de espera
-  layout.queue_spots.forEach((spot) => add_flat(collector, spot.x - 5, spot.x + 5, spot.z - 0.06, spot.z + 0.06, LAYER.marking, COLORS.road_line, 0.02));
 }
 
 function add_reserve_racks(collector) {
@@ -329,19 +454,59 @@ function add_dispatch(collector, layout) {
   });
 }
 
+// El taller de montacargas: una franja pegada a la pared sur con diez puestos para las de muelle a stock (naranja) y diez para las de
+// stock a racks y multinivel (azul)
 function add_workshop(collector, layout) {
   const zone = layout.zones.find((candidate) => candidate.id === "workshop");
   const wall_color = COLORS.wall;
-  [zone.z0, zone.z1].forEach((z) => collector.add_box((zone.x0 + zone.x1) / 2, 0.6, z, zone.x1 - zone.x0, 1.2, 0.2, wall_color));
   collector.add_box(zone.x0, 0.6, (zone.z0 + zone.z1) / 2, 0.2, 1.2, zone.z1 - zone.z0, wall_color);
-  collector.add_box(zone.x0 + 1.2, 0.5, zone.z0 + 1.2, 2.2, 1.0, 0.9, COLORS.steel_light);
+  collector.add_box(zone.x1, 0.6, (zone.z0 + zone.z1) / 2, 0.2, 1.2, zone.z1 - zone.z0, wall_color);
+  [[PARK_SPOTS_DOCK, "#fbd38d"], [PARK_SPOTS_STOCK, "#93c5fd"]].forEach(([spots, color]) => {
+    spots.forEach((spot) => add_flat(collector, spot.x - 0.7, spot.x + 0.7, spot.z - 1.3, spot.z + 1.3, LAYER.marking, color, 0.02));
+  });
+}
+
+// La bodega de recibo: muros bajos al sur y al este; al oeste, una pared con un hueco en cada andén por donde entran las
+// montacargas de muelle a stock; al norte queda abierta hacia el carril de las de stock a racks y multinivel. En el piso, el cuadro de
+// cada pila con el color de su categoría y los puestos de la franja de armado (pallets y cubetas).
+function add_staging(collector, layout) {
+  const zone = layout.zones.find((candidate) => candidate.id === "staging");
+  const wall_color = COLORS.wall;
+  collector.add_box((zone.x0 + zone.x1) / 2, 0.6, zone.z1, zone.x1 - zone.x0, 1.2, 0.2, wall_color);
+  collector.add_box(zone.x1, 0.6, (zone.z0 + zone.z1) / 2, 0.2, 1.2, zone.z1 - zone.z0, wall_color);
+  const gap = 2.6;
+  let cursor = zone.z0;
+  UNLOAD_BAYS.forEach((bay) => {
+    const end = bay.z - gap / 2;
+    if (end - cursor > 0.05) collector.add_box(zone.x0, 0.6, (cursor + end) / 2, 0.2, 1.2, end - cursor, wall_color);
+    cursor = bay.z + gap / 2;
+  });
+  if (zone.z1 - cursor > 0.05) collector.add_box(zone.x0, 0.6, (cursor + zone.z1) / 2, 0.2, 1.2, zone.z1 - cursor, wall_color);
+  for (let sku = 0; sku < SKU_COUNT; sku += 1) {
+    const slot = staging_slot(sku);
+    const half_width = STAGING.pile_width / 2 + 0.25;
+    // Los cuadros no se tocan entre filas (el paso en z es 2,4 m), para que no peleen por la misma altura
+    const half_depth = STAGING.pile_depth / 2 + 0.05;
+    add_flat(collector, slot.x - half_width, slot.x + half_width, slot.z - half_depth, slot.z + half_depth, LAYER.marking, CATEGORY_TONES[sku % CATEGORY_TONES.length], 0.02);
+  }
+  PALLET_SPOTS.forEach((spot) => add_flat(collector, spot.x - 0.7, spot.x + 0.7, spot.z - 0.6, spot.z + 0.6, LAYER.marking, COLORS.rail_yellow, 0.02));
+  TOTE_STATIONS.forEach((spot) => add_flat(collector, spot.x - 0.65, spot.x + 0.65, spot.z - 0.5, spot.z + 0.5, LAYER.marking, "#7dd3fc", 0.02));
+}
+
+// El cuadro de cada pila de despacho en el piso, con el color suave de su región
+function add_dispatch_bins(collector) {
+  DESTINATIONS.forEach((destination) => {
+    const slot = dispatch_bin_slot(destination.index);
+    const half = DISPATCH_BINS.size / 2 + 0.2;
+    add_flat(collector, slot.x - half, slot.x + half, slot.z - half, slot.z + half, LAYER.marking, lighten(destination.color, 0.75), 0.02);
+  });
 }
 
 function add_grid(THREE) {
   const vertices = [];
   const step = 5;
-  for (let x = Math.ceil(SITE.x0 / step) * step; x <= SITE.x1; x += step) vertices.push(x, 0.115, SITE.z0, x, 0.115, SITE.z1);
-  for (let z = Math.ceil(SITE.z0 / step) * step; z <= SITE.z1; z += step) vertices.push(SITE.x0, 0.115, z, SITE.x1, 0.115, z);
+  for (let x = Math.ceil(COMPOUND.x0 / step) * step; x <= COMPOUND.x1; x += step) vertices.push(x, 0.115, COMPOUND.z0, x, 0.115, COMPOUND.z1);
+  for (let z = Math.ceil(COMPOUND.z0 / step) * step; z <= COMPOUND.z1; z += step) vertices.push(COMPOUND.x0, 0.115, z, COMPOUND.x1, 0.115, z);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
   const material = new THREE.LineBasicMaterial({ color: COLORS.grid, transparent: true, opacity: 0.14 });
@@ -414,9 +579,41 @@ function build_signs(THREE, layout, collector) {
 }
 
 // Construye todo lo estático y lo devuelve en un grupo, junto con la lista de letreros
+// El número de cada muelle, para saber de cuál se habla en la configuración del patio: un círculo que siempre mira a la cámara
+function build_dock_labels(THREE, layout) {
+  return layout.docks.map((dock, index) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 96;
+    canvas.height = 96;
+    const context = canvas.getContext("2d");
+    context.fillStyle = "rgba(11, 18, 32, 0.92)";
+    context.beginPath();
+    context.arc(48, 48, 44, 0, Math.PI * 2);
+    context.fill();
+    context.lineWidth = 6;
+    context.strokeStyle = "#22d3ee";
+    context.stroke();
+    context.fillStyle = "#f8fafc";
+    context.font = "700 52px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(index + 1), 48, 52);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
+    sprite.position.set(dock.x - 1.2, 3.6, dock.z);
+    sprite.name = `dock_label_${index + 1}`;
+    sprite.renderOrder = 9;
+    return { sprite, dock_index: index };
+  });
+}
+
 export function build_static_scene(THREE, layout) {
   const collector = new PartCollector(THREE);
   add_terrain(collector, layout);
+  add_parking(collector, layout);
+  add_fence(collector);
+  add_gates(collector);
   add_customers(collector, layout);
   add_building_walls(collector, layout);
   add_docks_and_rails(collector, layout);
@@ -432,6 +629,8 @@ export function build_static_scene(THREE, layout) {
   add_pack_stations(collector, layout);
   add_dispatch(collector, layout);
   add_workshop(collector, layout);
+  add_staging(collector, layout);
+  add_dispatch_bins(collector);
   const signs = build_signs(THREE, layout, collector);
 
   const geometry = collector.build();
@@ -445,6 +644,9 @@ export function build_static_scene(THREE, layout) {
   group.name = "static_group";
   group.add(mesh);
   group.add(add_grid(THREE));
+  group.add(build_trees_mesh(THREE));
   signs.forEach((sign) => group.add(sign.sprite));
-  return { group, signs, mesh, vertex_count: collector.vertex_count };
+  const dock_labels = build_dock_labels(THREE, layout);
+  dock_labels.forEach((label) => group.add(label.sprite));
+  return { group, signs, dock_labels, mesh, vertex_count: collector.vertex_count };
 }

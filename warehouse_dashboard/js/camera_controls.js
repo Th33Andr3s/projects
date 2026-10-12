@@ -1,4 +1,4 @@
-// Los gestos y teclas que mueven la cámara: arrastrar para desplazarse, rueda o pellizco para acercar, flechas y +/− con el
+// Los gestos y teclas que mueven la cámara: arrastrar para desplazarse, Ctrl + rueda o pellizco para acercar, flechas y +/− con el
 // lienzo enfocado. La matemática está en camera_rig.js; aquí solo se traducen eventos de la página a esas llamadas.
 // Los giros de 90° (Q y E) son atajos globales y los maneja main.js.
 
@@ -86,6 +86,12 @@ export function attach_camera_controls(controller) {
   }
 
   function on_wheel(event) {
+    // La rueda sola baja la página hasta las secciones; para acercar con el mouse se mantiene Ctrl (o Cmd). El pellizco del
+    // trackpad llega como rueda con Ctrl, así que también acerca.
+    if (!event.ctrlKey && !event.metaKey) {
+      if (controller.on_wheel_hint) controller.on_wheel_hint();
+      return;
+    }
     event.preventDefault();
     const anchor = normalized(event.clientX, event.clientY);
     // deltaMode 1 son líneas en lugar de píxeles (algunos ratones en Firefox)

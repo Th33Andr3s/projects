@@ -1,19 +1,38 @@
 // Salida: cuando un pedido completa su casilla, un operario del muro la vacía en una cubeta que va por banda a empaque; una
-// estación la convierte en un paquete sellado que sigue a despacho; en la puerta se carga al camión, y los camiones salen por
-// horario (cada cierto tiempo simulado, con lo que lleven, aunque sea nada).
+// estación la convierte en un paquete sellado que sigue por la banda de despacho hasta la pila de su destino. A cada hora de corte
+// salen camiones, uno por ciudad, con los paquetes de los pedidos a los que les tocaba ese corte; los que no estaban listos son
+// envíos tardíos y salen en el siguiente. Cada salida queda en el informe y cada entrega, en el registro de Entrega a Tiempo (OTD).
+// La persona puede cerrar la entrada de camiones de despacho.
 
 import { Belt } from "./belts.js";
-import { DispatchDoor, PackStation, Parcel, Tote, Truck, Worker } from "./entities.js";
+import { DESTINATIONS, make_route } from "./catalog.js";
+import { DAY_SECONDS, day_index, day_start_time, next_cutoff_after } from "./cutoffs.js";
+import { DispatchBin, DispatchDoor, PackStation, Parcel, Tote, Truck, Worker } from "./entities.js";
+import { GATES, ROAD_SPAWN_X, dispatch_bin_slot } from "./layout.js";
 import { project_on_path } from "./path_tools.js";
 
 const EMPTY_SLOT_SECONDS = 4;
 const TOTE_OUT_HEIGHT = 0.3;
-// El nuevo camión de una puerta entra poco después de que el anterior arranca
-const REPLACEMENT_DELAY_SECONDS = 8;
-const ENTRY_LANE_Z = 3.5;
-const EXIT_LANE_Z = -3.5;
-const CAB_COLORS = ["#ef4444", "#3b82f6", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899"];
+// Cuántos camiones recuerda el informe como máximo
+const DISPATCH_LOG_LIMIT = 600;
+// Lo que tarda en cargarse un paquete al camión, y cada cuánto puede salir a la carretera un camión nuevo
+const LOAD_SECONDS = 0.6;
+const SPAWN_GAP_SECONDS = 8;
+// El viaje: a qué velocidad promedio se promete la entrega (km/h), cuánto cambia la de cada camión y la tolerancia de la promesa
+const NOMINAL_SPEED_KMH = 55;
+const SPEED_DEVIATION_KMH = 4;
+const MIN_SPEED_KMH = 45;
+const MAX_SPEED_KMH = 65;
+const DELIVERY_TOLERANCE_SECONDS = 3600;
+// Separación entre los camiones que esperan en la carretera, para que no se pisen
+const ROAD_QUEUE_SPACING = 13;
 const TURN_SECONDS = 2.5;
+const ROAD_SPEED = 9;
+const GATE_CROSSING_SPEED = 3.5;
+const YARD_SPEED = 5;
+const GATE_CLEARANCE = 9;
+// Los camiones de despacho llevan números desde aquí, para no confundirlos con los de recibo
+const DISPATCH_FIRST_NUMBER = 501;
 
 export class OutboundSystem {
   constructor(sim) {
@@ -42,98 +61,219 @@ export class OutboundSystem {
     });
     this.packers = [];
 
+    this.out.on_end = (parcel, belt, now) => this.receive_parcel(parcel, now);
+
     this.doors = layout.doors.map((layout_door, index) => {
       const door = new DispatchDoor(index, layout_door, 0);
-      door.lane = new Belt(`door_lane_${index + 1}`, "door", paths.door_lanes[index], () => sim.belt_speed());
-      door.lane.on_end = (parcel, belt, now) => this.load_parcel(door, parcel, now);
-      door.gate_s = project_on_path(paths.dispatch_chain, 58, layout_door.z);
-      this.out.add_gate({ s: door.gate_s, name: `door_${index + 1}`, handle: (parcel, belt, now) => this.door_gate(door, parcel, now) });
-      sim.belts.push(door.lane);
+      door.enabled = index < config.get("door_count");
       return door;
     });
     this.trucks = [];
     this.operators = [];
-
-    // Los camiones de despacho que ya esperan en cada puerta al empezar, y su horario de salida
-    const first = config.get("door_count");
-    const interval = config.get("truck_departure_minutes") * 60;
-    this.doors.forEach((door, index) => {
-      door.enabled = index < first;
-      door.next_departure_at = null;
-      if (index >= first) return;
-      this.spawn_initial_truck(door);
-      this.schedule_departure(door, interval * (1 - index / first));
-    });
+    // El informe de despachos: un renglón por cada camión que sale en un corte
+    this.log = [];
+    this.log_count = 0;
+    // Una pila de paquetes listos por destino, los camiones que faltan por entrar en la ola del corte y las entregas registradas
+    this.bins = DESTINATIONS.map((destination) => new DispatchBin(destination, dispatch_bin_slot(destination.index)));
+    this.jobs = [];
+    this.deliveries = [];
+    this.last_spawn_at = -Infinity;
+    this.cutoff_event_id = null;
+    this.cutoff_event_time = null;
+    this.schedule_next_cutoff(0);
   }
 
-  // ---------- Camiones de despacho ----------
-  new_dispatch_truck(door, now) {
-    const truck = new Truck(this.sim.next_id("truck_dispatch"), "dispatch", now);
+  // ---------- Camiones de despacho: una ola por hora de corte ----------
+  // Los paquetes empacados llegan al final de la banda de despacho y esperan en la pila de su destino. A cada hora de corte salen
+  // los de los pedidos a los que les tocaba ese corte (o uno anterior, si habían quedado tardíos): un camión por ciudad, o más si
+  // no caben en uno. Los pedidos que no estaban listos pierden el corte: son envíos tardíos y salen en el siguiente.
+
+  // El paquete llega al final de la banda: queda en la pila de su destino, esperando el corte
+  receive_parcel(parcel, now) {
+    const { sim } = this;
+    const bin = this.bins[parcel.order.destination.index];
+    parcel.boxes.forEach((box) => box.machine.go_to("IN_DISPATCH_BIN", now));
+    parcel.ready_at = now;
+    bin.parcels.push(parcel);
+    sim.parcels = sim.parcels.filter((candidate) => candidate !== parcel);
+    return true;
+  }
+
+  // ---------- Cortes ----------
+  schedule_next_cutoff(now) {
+    const at = next_cutoff_after(now, this.sim.yard.cutoffs, 0);
+    this.cutoff_event_time = at;
+    this.cutoff_event_id = this.sim.events.schedule(at, "dispatch_cutoff", {});
+  }
+
+  // La persona cambió las horas de corte: se cancela el corte que venía, se programa el que sigue y los pedidos toman su corte nuevo
+  reschedule_cutoffs(now) {
+    if (this.cutoff_event_id !== null) this.sim.events.cancel(this.cutoff_event_id);
+    this.sim.orders.reassign_cutoffs(now);
+    this.schedule_next_cutoff(now);
+  }
+
+  on_cutoff_event(now) {
+    this.run_cutoff(now);
+    this.schedule_next_cutoff(now);
+  }
+
+  // Llegó una hora de corte: se arman los camiones con lo que está listo y los demás pedidos del corte pasan a tardíos
+  run_cutoff(now) {
+    const { sim } = this;
+    const capacity = sim.config.get("dispatch_truck_capacity");
+    const going_orders = new Set();
+    const created = [];
+    this.bins.forEach((bin) => {
+      const going = bin.parcels.filter((parcel) => parcel.order.cutoff_at <= now).sort((first, second) => first.order.created_at - second.order.created_at);
+      if (going.length === 0) return;
+      bin.parcels = bin.parcels.filter((parcel) => !going.includes(parcel));
+      going.forEach((parcel) => going_orders.add(parcel.order));
+      // Un camión por ciudad; si no caben, otro de la misma ciudad
+      let current = null;
+      going.forEach((parcel) => {
+        const boxes = parcel.boxes.length;
+        if (!current || (current.boxes > 0 && current.boxes + boxes > capacity)) {
+          current = { destination: bin.destination, parcels: [], boxes: 0, cutoff_at: now, cutoff_text: sim.format_time(now) };
+          created.push(current);
+        }
+        current.parcels.push(parcel);
+        current.boxes += boxes;
+      });
+    });
+    // Los pedidos de este corte que no estaban listos (en proceso, o empacados pero todavía en la banda) pierden el corte
+    sim.orders.orders.forEach((order) => {
+      if (order.cutoff_at <= now && !going_orders.has(order)) {
+        sim.orders.mark_late(order, now);
+        sim.counters.late_shipments += 1;
+      }
+    });
+    // Las rutas más largas salen primero
+    created.sort((first, second) => second.destination.kilometers - first.destination.kilometers);
+    this.jobs.push(...created);
+    sim.counters.cutoffs_run += 1;
+    sim.emit({ type: "dispatch_cutoff", trucks: created.length, at: now });
+  }
+
+  // ---------- Camiones ----------
+  new_dispatch_truck(door, job, now) {
+    const { sim } = this;
+    const truck = new Truck(DISPATCH_FIRST_NUMBER - 1 + sim.next_id("truck_dispatch"), "dispatch", now);
     truck.door = door;
-    truck.cab_color = CAB_COLORS[truck.id % CAB_COLORS.length];
+    truck.destination = job.destination;
+    truck.route = make_route(job.destination.region_index, job.destination.city_index, false);
     truck.docked = false;
+    truck.job = job;
+    truck.load_queue = [...job.parcels];
+    truck.load_timer = 0;
+    truck.cutoff_at = job.cutoff_at;
+    truck.cutoff_text = job.cutoff_text;
+    // A qué velocidad promedio hace el viaje (con paradas y tráfico): cambia de un camión a otro
+    truck.speed_kmh = Math.min(MAX_SPEED_KMH, Math.max(MIN_SPEED_KMH, sim.rng_routes.normal(NOMINAL_SPEED_KMH, SPEED_DEVIATION_KMH)));
     door.truck = truck;
     door.machine.go_to("OCCUPIED", now);
     this.trucks.push(truck);
     return truck;
   }
 
-  spawn_initial_truck(door) {
-    const truck = this.new_dispatch_truck(door, 0);
-    truck.teleport(door.layout.truck_x, 0, door.z, 0);
-    truck.door_open = 1;
-    truck.docked = true;
-  }
-
-  spawn_entering_truck(door, now) {
-    const truck = this.new_dispatch_truck(door, now);
-    truck.teleport(105, 0, ENTRY_LANE_Z, Math.PI);
+  // El camión llega por la carretera del este, espera en la talanquera, entra y se acopla de reversa a su puerta
+  spawn_entering_truck(door, job, now) {
+    const { sim } = this;
+    const truck = this.new_dispatch_truck(door, job, now);
+    const lane = sim.gates.east_in;
+    truck.teleport(ROAD_SPAWN_X, 0, lane.z, Math.PI);
     truck.start_script([
-      { do: "drive", points: [{ x: 99, z: ENTRY_LANE_Z }, { x: door.layout.approach_x, z: door.z }] },
+      // Cada puerta espera en su propio lugar de la fila, así dos camiones detenidos por el bloqueo no quedan uno encima del otro
+      { do: "drive", points: [{ x: lane.stop_x + door.index * ROAD_QUEUE_SPACING, z: lane.z }], speed: ROAD_SPEED },
+      { do: "until", test: () => !sim.yard.dispatch_blocked },
+      { do: "drive", points: [{ x: lane.stop_x, z: lane.z }], speed: ROAD_SPEED },
+      { do: "until", test: () => lane.try_claim(truck) },
+      { do: "until", test: () => lane.is_open_for(truck) },
+      { do: "drive", points: [{ x: GATES.east.x - GATE_CLEARANCE, z: lane.z }], speed: GATE_CROSSING_SPEED },
+      {
+        do: "call",
+        fn: (time) => {
+          lane.release(truck);
+          truck.arrived_text = sim.format_time(time);
+        },
+      },
+      { do: "drive", points: [{ x: GATES.east.x - GATE_CLEARANCE - 1, z: lane.z }, { x: GATES.east.x - GATE_CLEARANCE - 1, z: door.z }, { x: door.layout.approach_x, z: door.z }], speed: YARD_SPEED },
       { do: "turn", yaw: 0, seconds: TURN_SECONDS },
       { do: "drive", points: [{ x: door.layout.truck_x, z: door.z }], reverse: true, speed: 2.5 },
       {
         do: "call",
-        fn: () => {
+        fn: (time) => {
           truck.docked = true;
           truck.door_open = 1;
+          truck.machine.go_to("LOADING", time);
         },
       },
     ]);
   }
 
-  schedule_departure(door, time) {
-    door.next_departure_at = time;
-    this.sim.events.schedule(time, "dispatch_departure", { door_index: door.index });
+  // Los camiones que faltan entran a las puertas libres, de a uno cada cierto tiempo para que no salgan encimados de la pantalla
+  fill_doors(now) {
+    if (this.sim.yard.dispatch_blocked || this.jobs.length === 0) return;
+    for (const door of this.doors) {
+      if (this.jobs.length === 0 || now - this.last_spawn_at < SPAWN_GAP_SECONDS) break;
+      if (!door.enabled || door.truck) continue;
+      this.last_spawn_at = now;
+      this.spawn_entering_truck(door, this.jobs.shift(), now);
+    }
   }
 
-  on_departure_event(door_index, now) {
-    const { sim } = this;
-    const door = this.doors[door_index];
-    const interval = sim.config.get("truck_departure_minutes") * 60;
-    // Una puerta cerrada ya no programa más salidas
-    if (door.enabled) this.schedule_departure(door, now + interval);
-    else door.next_departure_at = null;
-    const truck = door.truck;
-    if (!truck || !truck.docked) return;
-    this.depart(door, truck, now);
+  // Un camión acoplado carga sus paquetes de a uno; cuando termina, sale
+  step_loading(now, dt) {
+    this.doors.forEach((door) => {
+      const truck = door.truck;
+      if (!truck || !truck.docked || truck.machine.state !== "LOADING") return;
+      truck.load_timer -= dt;
+      while (truck.load_timer <= 0 && truck.load_queue.length > 0) {
+        this.load_one(door, truck, now);
+        truck.load_timer += LOAD_SECONDS;
+      }
+      // A la talanquera de salida va un camión a la vez; los demás esperan cargados en su puerta
+      if (truck.load_queue.length === 0 && this.exit_is_free()) this.depart(door, truck, now);
+    });
+  }
+
+  exit_is_free() {
+    return !this.trucks.some((truck) => truck.machine.state === "DEPARTING" && !truck.exit_claimed);
+  }
+
+  load_one(door, truck, now) {
+    const parcel = truck.load_queue.shift();
+    parcel.boxes.forEach((box) => box.machine.go_to("LOADED", now));
+    truck.cargo.push(parcel);
+    truck.loaded_count += 1;
+    this.sim.emit({ type: "parcel_loaded", door });
   }
 
   depart(door, truck, now) {
     const { sim } = this;
-    if (truck.loaded_count > 0) {
-      truck.cargo.forEach((parcel) => this.ship_parcel(parcel, now));
-      sim.counters.trucks_dispatched += 1;
-    } else {
-      sim.counters.empty_departures += 1;
-    }
+    this.record(door, truck, now);
+    truck.cargo.forEach((parcel) => this.ship_parcel(parcel, now, truck));
+    sim.counters.trucks_dispatched += 1;
     truck.machine.go_to("DEPARTING", now);
     truck.docked = false;
-    sim.emit({ type: "truck_departing", truck, empty: truck.loaded_count === 0 });
+    sim.emit({ type: "truck_departing", truck, empty: false });
     door.truck = null;
     door.machine.go_to("EMPTY", now);
+    const lane = sim.gates.east_out;
     truck.start_script([
-      { do: "drive", points: [{ x: door.layout.approach_x, z: door.z }, { x: 99, z: EXIT_LANE_Z }, { x: 106, z: EXIT_LANE_Z }] },
+      { do: "drive", points: [{ x: door.layout.approach_x, z: door.z }, { x: GATES.east.x - GATE_CLEARANCE - 1, z: door.z }, { x: GATES.east.x - GATE_CLEARANCE - 1, z: lane.z }, { x: lane.stop_x, z: lane.z }], speed: YARD_SPEED },
+      {
+        do: "until",
+        test: () => {
+          if (!lane.try_claim(truck)) return false;
+          truck.exit_claimed = true;
+          return true;
+        },
+      },
+      { do: "until", test: () => lane.is_open_for(truck) },
+      { do: "drive", points: [{ x: GATES.east.x + GATE_CLEARANCE, z: lane.z }], speed: GATE_CROSSING_SPEED },
+      { do: "call", fn: () => lane.release(truck) },
+      { do: "drive", points: [{ x: ROAD_SPAWN_X + 10, z: lane.z }], speed: ROAD_SPEED },
       {
         do: "call",
         fn: (time) => {
@@ -143,20 +283,48 @@ export class OutboundSystem {
       },
     ]);
     truck.door_open = 0;
-    if (door.enabled) sim.events.schedule(now + REPLACEMENT_DELAY_SECONDS, "dispatch_truck", { door_index: door.index });
   }
 
-  on_replacement_event(door_index, now) {
-    const door = this.doors[door_index];
-    if (door.enabled && !door.truck) this.spawn_entering_truck(door, now);
+  // Un renglón del informe de despachos: un camión que salió en un corte
+  record(door, truck, now) {
+    let boxes = 0;
+    let units = 0;
+    let late = 0;
+    truck.cargo.forEach((parcel) => {
+      boxes += parcel.boxes.length;
+      if (parcel.order.late) late += 1;
+      parcel.boxes.forEach((box) => {
+        units += box.units;
+      });
+    });
+    this.log_count += 1;
+    this.log.push({
+      id: this.log_count,
+      cutoff_at: truck.cutoff_at,
+      cutoff_text: truck.cutoff_text,
+      departed_at: now,
+      departed_text: this.sim.format_time(now),
+      door: door.index + 1,
+      truck_id: truck.id,
+      destination: truck.route.text,
+      kilometers: truck.destination.kilometers,
+      orders: truck.cargo.length,
+      late_orders: late,
+      boxes,
+      units,
+    });
+    if (this.log.length > DISPATCH_LOG_LIMIT) this.log.shift();
   }
 
-  // Lo que va en el camión que sale queda despachado
-  ship_parcel(parcel, now) {
+  // Lo que va en el camión que sale queda despachado, y su entrega queda registrada para la Entrega a Tiempo (OTD)
+  ship_parcel(parcel, now, truck) {
     const { sim } = this;
     const order = parcel.order;
+    let units = 0;
     parcel.boxes.forEach((box) => {
+      units += box.units;
       box.machine.go_to("SHIPPED", now);
+      sim.inventory.ship(box);
       sim.retire_box(box);
     });
     order.machine.go_to("DISPATCHED", now);
@@ -167,63 +335,78 @@ export class OutboundSystem {
     sim.orders.orders = sim.orders.orders.filter((candidate) => candidate !== order);
     sim.finished_orders.push(order);
     sim.parcels = sim.parcels.filter((candidate) => candidate !== parcel);
+    this.record_delivery(order, truck, now, parcel.boxes.length, units);
   }
 
-  // Puertas que se abren con el slider: reciben camión y salidas por horario
-  sync_doors(now) {
+  // Cuándo llega el pedido al cliente (salida más el viaje) contra cuándo se prometió (corte más el viaje a velocidad normal más una
+  // tolerancia). Un pedido que perdió su corte nunca es a tiempo.
+  record_delivery(order, truck, now, boxes, units) {
     const { sim } = this;
-    const wanted = sim.config.get("door_count");
-    const interval = sim.config.get("truck_departure_minutes") * 60;
+    const { kilometers } = order.destination;
+    const arrival_at = now + (kilometers / truck.speed_kmh) * 3600;
+    const promised_at = order.promised_cutoff + (kilometers / NOMINAL_SPEED_KMH) * 3600 + DELIVERY_TOLERANCE_SECONDS;
+    const late_shipment = order.late;
+    const late_arrival = arrival_at > promised_at;
+    const on_time = !late_shipment && !late_arrival;
+    if (on_time) sim.counters.orders_on_time += 1;
+    this.deliveries.push({
+      order_id: order.id,
+      city: order.destination.city,
+      region: order.destination.region,
+      kilometers,
+      boxes,
+      units,
+      created_at: order.created_at,
+      promised_cutoff: order.promised_cutoff,
+      shipped_at: now,
+      truck_id: truck.id,
+      arrival_at,
+      promised_at,
+      late_shipment,
+      late_arrival,
+      on_time,
+    });
+  }
+
+  // El informe de Entrega a Tiempo por día de entrega prometida: { days, deliveries, pending_late, totals }
+  otd_report() {
+    const { sim } = this;
+    const days = new Map();
+    this.deliveries.forEach((delivery) => {
+      const key = day_index(delivery.promised_at);
+      if (!days.has(key)) days.set(key, { key, orders: 0, on_time: 0, late_shipment: 0, late_arrival: 0, units: 0 });
+      const row = days.get(key);
+      row.orders += 1;
+      row.units += delivery.units;
+      if (delivery.on_time) row.on_time += 1;
+      else if (delivery.late_shipment) row.late_shipment += 1;
+      else row.late_arrival += 1;
+    });
+    const rows = [...days.values()]
+      .sort((first, second) => first.key - second.key)
+      .map((row) => ({ ...row, date: sim.format_iso_date(day_start_time(row.key)), otd: row.orders > 0 ? row.on_time / row.orders : null }));
+    const total = this.deliveries.length;
+    const on_time = this.deliveries.filter((delivery) => delivery.on_time).length;
+    // Pedidos que ya perdieron su corte y todavía no salen: atrasados sin enviar
+    const pending_late = sim.orders.orders.filter((order) => order.late).length;
+    return { days: rows, deliveries: this.deliveries, pending_late, totals: { orders: total, on_time, otd: total > 0 ? on_time / total : null } };
+  }
+
+  // Puertas que se abren con el slider
+  sync_doors() {
+    const wanted = this.sim.config.get("door_count");
     this.doors.forEach((door, index) => {
-      const enabled = index < wanted;
-      if (enabled && !door.enabled) {
-        // Recién abierta: llega un camión y empieza su horario
-        door.enabled = true;
-        if (!door.truck) this.spawn_entering_truck(door, now);
-        if (door.next_departure_at === null) this.schedule_departure(door, now + interval);
-      } else if (!enabled && door.enabled) {
-        door.enabled = false;
-      }
+      door.enabled = index < wanted;
     });
   }
 
-  // ---------- Paquetes hacia la puerta ----------
-  choose_door() {
-    let best = null;
-    this.doors.forEach((door) => {
-      if (door.enabled && (!best || door.assigned < best.assigned)) best = door;
-    });
-    return best;
-  }
-
-  door_gate(door, parcel, now) {
-    if (parcel.door !== door) return "pass";
-    // Una puerta que se cerró después de asignar el paquete: se reasigna a otra
-    if (!door.enabled) {
-      const other = this.choose_door();
-      if (other) {
-        door.assigned -= 1;
-        other.assigned += 1;
-        parcel.door = other;
-      }
-      return "pass";
-    }
-    if (!door.lane.has_space_at(0, parcel.belt_length)) return "hold";
-    door.lane.try_insert(parcel, 0, now);
-    return "take";
-  }
-
-  load_parcel(door, parcel, now) {
-    const truck = door.truck;
-    if (!truck || !truck.docked || !["WAITING_AT_DOOR", "LOADING"].includes(truck.machine.state)) return false;
-    if (truck.machine.state === "WAITING_AT_DOOR") truck.machine.go_to("LOADING", now);
-    parcel.boxes.forEach((box) => box.machine.go_to("LOADED", now));
-    truck.cargo.push(parcel);
-    truck.loaded_count += 1;
-    door.assigned -= 1;
-    parcel.door = null;
-    this.sim.emit({ type: "parcel_loaded", door });
-    return true;
+  // Los pedidos listos de cada destino y los camiones que faltan por salir (para la interfaz)
+  pending_summary() {
+    return {
+      bins: this.bins.filter((bin) => bin.parcels.length > 0),
+      jobs: this.jobs.length,
+      next_cutoff_at: this.cutoff_event_time,
+    };
   }
 
   // ---------- Muros: vaciar una casilla completa ----------
@@ -389,9 +572,6 @@ export class OutboundSystem {
       // Se pone en la banda de salida cuando hay hueco; mientras tanto la estación sigue ocupada
       const parcel = station.parcel;
       if (!this.out.has_space_at(station.drop_s, parcel.belt_length)) return;
-      const door = this.choose_door();
-      parcel.door = door;
-      door.assigned += 1;
       parcel.boxes.forEach((box) => box.machine.go_to("ON_DISPATCH_BELT", now));
       this.out.try_insert(parcel, station.drop_s, now);
       station.parcel = null;
@@ -404,9 +584,11 @@ export class OutboundSystem {
   step(now, dt) {
     this.sync_stations();
     this.sync_packers(now);
-    this.sync_doors(now);
+    this.sync_doors();
+    this.fill_doors(now);
     this.step_operators(now);
     this.step_stations(now, dt);
+    this.step_loading(now, dt);
     this.operators.forEach((operator) => operator.update(dt, now));
     this.trucks.forEach((truck) => truck.update(dt, now));
   }
@@ -415,6 +597,5 @@ export class OutboundSystem {
     this.east.update(dt, now);
     this.feed.update(dt, now);
     this.out.update(dt, now);
-    this.doors.forEach((door) => door.lane.update(dt, now));
   }
 }

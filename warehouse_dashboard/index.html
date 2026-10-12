@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Simulador de centro de distribución</title>
-  <meta name="description" content="Simulador 3D isométrico de un centro de distribución: recibo de tractomulas, reserva, multinivel activo, pedidos, empaque y despacho.">
+  <meta name="description" content="Simulador 3D isométrico de un centro de distribución: patio de recibo con parqueadero y 10 muelles, inventario, reserva, multinivel activo, pedidos, empaque y despacho.">
   <link rel="icon" href="./assets/icons/favicon.ico" sizes="any">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
   <link rel="stylesheet" href="./css/styles.css">
@@ -21,144 +21,225 @@
   <a class="skip_link" href="#scene_canvas">Saltar al simulador</a>
 
   <main id="main_content">
-    <h1 class="visually_hidden">Simulador 3D de un centro de distribución</h1>
+    <!-- Primera pantalla: solo la bodega en 3D, completa. Todo lo demás está más abajo, con scroll. -->
+    <div id="hero" class="hero">
+      <h1 class="visually_hidden">Simulador 3D de un centro de distribución</h1>
 
-    <!-- El lienzo 3D ocupa toda la ventana; lo demás flota encima -->
-    <div id="scene_container" class="scene_container">
-      <canvas id="scene_canvas" class="scene_canvas" tabindex="0" role="img"
-        aria-label="Centro de distribución en 3D. Con el lienzo enfocado, las flechas mueven la vista, más y menos acercan, Q y E giran."></canvas>
-      <p id="scene_message" class="scene_message" role="alert" hidden>
-        No se pudo cargar la escena 3D. Revisa tu conexión o prueba con otro navegador. Los controles de la página siguen disponibles.
-      </p>
-    </div>
-
-    <!-- Barra superior -->
-    <header class="top_bar">
-      <div class="top_group" role="group" aria-label="Simulación">
-        <button id="play_button" class="icon_button" type="button" aria-label="Pausar">
-          <i class="fa-solid fa-pause" aria-hidden="true"></i>
-        </button>
-        <fieldset class="speed_group">
-          <legend class="visually_hidden">Velocidad de la simulación</legend>
-          <input id="speed_1" class="speed_input" type="radio" name="speed" value="1" checked>
-          <label class="speed_label" for="speed_1">1×</label>
-          <input id="speed_2" class="speed_input" type="radio" name="speed" value="2">
-          <label class="speed_label" for="speed_2">2×</label>
-          <input id="speed_5" class="speed_input" type="radio" name="speed" value="5">
-          <label class="speed_label" for="speed_5">5×</label>
-          <input id="speed_10" class="speed_input" type="radio" name="speed" value="10">
-          <label class="speed_label" for="speed_10">10×</label>
-        </fieldset>
-        <p class="clock">
-          <i class="fa-regular fa-clock" aria-hidden="true"></i>
-          <span class="visually_hidden">Hora simulada:</span>
-          <time id="clock_display">06:00 · Día 1</time>
+      <div id="scene_container" class="scene_container">
+        <canvas id="scene_canvas" class="scene_canvas" tabindex="0" role="img"
+          aria-label="Centro de distribución en 3D. Con el lienzo enfocado, las flechas mueven la vista, más y menos acercan, Q y E giran."></canvas>
+        <p id="scene_message" class="scene_message" role="alert" hidden>
+          No se pudo cargar la escena 3D. Revisa tu conexión o prueba con otro navegador. Los controles de la página siguen disponibles.
         </p>
       </div>
 
-      <div class="top_group" role="group" aria-label="Semilla">
-        <label class="seed_label" for="seed_input">Semilla</label>
-        <input id="seed_input" class="seed_input" type="number" inputmode="numeric" min="0" max="4294967295" step="1" value="2026">
-        <button id="reset_button" class="text_button" type="button">
-          <i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i>
-          <span>Reiniciar</span>
-        </button>
-      </div>
+      <header class="top_bar">
+        <div class="top_group" role="group" aria-label="Simulación">
+          <button id="play_button" class="icon_button" type="button" aria-label="Pausar">
+            <i class="fa-solid fa-pause" aria-hidden="true"></i>
+          </button>
+          <fieldset class="speed_group">
+            <legend class="visually_hidden">Velocidad de la simulación</legend>
+            <input id="speed_1" class="speed_input" type="radio" name="speed" value="1" checked>
+            <label class="speed_label" for="speed_1">1×</label>
+            <input id="speed_2" class="speed_input" type="radio" name="speed" value="2">
+            <label class="speed_label" for="speed_2">2×</label>
+            <input id="speed_5" class="speed_input" type="radio" name="speed" value="5">
+            <label class="speed_label" for="speed_5">5×</label>
+            <input id="speed_10" class="speed_input" type="radio" name="speed" value="10">
+            <label class="speed_label" for="speed_10">10×</label>
+            <input id="speed_25" class="speed_input" type="radio" name="speed" value="25">
+            <label class="speed_label" for="speed_25" title="Un día en unos 14 minutos">25×</label>
+            <input id="speed_50" class="speed_input" type="radio" name="speed" value="50">
+            <label class="speed_label" for="speed_50" title="Un día en unos 7 minutos">50×</label>
+            <input id="speed_100" class="speed_input" type="radio" name="speed" value="100">
+            <label class="speed_label" for="speed_100" title="Un día en unos 3,5 minutos">100×</label>
+          </fieldset>
+          <p class="clock">
+            <i class="fa-regular fa-clock" aria-hidden="true"></i>
+            <span class="visually_hidden">Hora simulada:</span>
+            <time id="clock_display">06:00 · Día 1</time>
+          </p>
+        </div>
 
-      <div class="top_group" role="group" aria-label="Vista y sonido">
-        <button id="rotate_left_button" class="icon_button" type="button" aria-label="Girar la vista a la izquierda (Q)">
-          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
-        </button>
-        <button id="rotate_right_button" class="icon_button" type="button" aria-label="Girar la vista a la derecha (E)">
-          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
-        </button>
-        <button id="zoom_in_button" class="icon_button" type="button" aria-label="Acercar (+)">
-          <i class="fa-solid fa-plus" aria-hidden="true"></i>
-        </button>
-        <button id="zoom_out_button" class="icon_button" type="button" aria-label="Alejar (−)">
-          <i class="fa-solid fa-minus" aria-hidden="true"></i>
-        </button>
-        <button id="fit_button" class="icon_button" type="button" aria-label="Encuadrar toda la bodega (Inicio)">
-          <i class="fa-solid fa-expand" aria-hidden="true"></i>
-        </button>
-        <button id="mute_button" class="icon_button" type="button" aria-pressed="false" aria-label="Silencio (M)">
-          <i class="fa-solid fa-volume-high icon_sound_on" aria-hidden="true"></i>
-          <i class="fa-solid fa-volume-xmark icon_sound_off" aria-hidden="true"></i>
-        </button>
-      </div>
-    </header>
+        <div class="top_group" role="group" aria-label="Semilla">
+          <label class="seed_label" for="seed_input">Semilla</label>
+          <input id="seed_input" class="seed_input" type="number" inputmode="numeric" min="0" max="4294967295" step="1" value="2026">
+          <button id="reset_button" class="text_button" type="button">
+            <i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i>
+            <span>Reiniciar</span>
+          </button>
+        </div>
 
-    <p id="fps_badge" class="fps_badge" hidden></p>
-    <p id="live_status" class="visually_hidden" role="status"></p>
+        <div class="top_group" role="group" aria-label="Vista y sonido">
+          <button id="rotate_left_button" class="icon_button" type="button" aria-label="Girar la vista a la izquierda (Q)">
+            <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+          </button>
+          <button id="rotate_right_button" class="icon_button" type="button" aria-label="Girar la vista a la derecha (E)">
+            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+          </button>
+          <button id="zoom_in_button" class="icon_button" type="button" aria-label="Acercar (+)">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          </button>
+          <button id="zoom_out_button" class="icon_button" type="button" aria-label="Alejar (−)">
+            <i class="fa-solid fa-minus" aria-hidden="true"></i>
+          </button>
+          <button id="fit_button" class="icon_button" type="button" aria-label="Encuadrar toda la bodega (Inicio)">
+            <i class="fa-solid fa-expand" aria-hidden="true"></i>
+          </button>
+          <button id="mute_button" class="icon_button" type="button" aria-pressed="false" aria-label="Silencio (M)">
+            <i class="fa-solid fa-volume-high icon_sound_on" aria-hidden="true"></i>
+            <i class="fa-solid fa-volume-xmark icon_sound_off" aria-hidden="true"></i>
+          </button>
+        </div>
 
-    <!-- Avisos: problemas con pedidos y disrupciones activas -->
-    <div id="alert_stack" class="alert_stack"></div>
-
-    <!-- Cajones: a los lados en pantallas anchas, desde abajo en celulares -->
-    <aside id="params_drawer" class="drawer drawer_left" aria-labelledby="params_title" inert>
-      <header class="drawer_header">
-        <h2 id="params_title">Parámetros</h2>
-        <button class="icon_button" type="button" data-close_drawer="params_drawer" aria-label="Cerrar parámetros">
-          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-        </button>
+        <div class="top_group" role="group" aria-label="Ayuda">
+          <button id="legend_button" class="icon_button" type="button" aria-expanded="false" aria-controls="legend_panel" aria-label="Leyenda de colores">
+            <i class="fa-solid fa-palette" aria-hidden="true"></i>
+          </button>
+          <button id="shortcuts_button" class="icon_button" type="button" aria-label="Atajos de teclado (?)">
+            <i class="fa-regular fa-keyboard" aria-hidden="true"></i>
+          </button>
+        </div>
+        <form id="send_trucks_form" class="top_group send_trucks" aria-label="Hacer llegar camiones ahora">
+          <label class="seed_label" for="send_trucks_input">Camiones ya</label>
+          <input id="send_trucks_input" class="seed_input send_trucks_input" type="number" inputmode="numeric" min="1" max="40" step="1" value="4">
+          <button id="send_trucks_button" class="text_button" type="submit">
+            <i class="fa-solid fa-truck-fast" aria-hidden="true"></i>
+            <span>Llegar</span>
+          </button>
+        </form>
       </header>
-      <div id="params_body" class="drawer_body"></div>
-      <footer class="drawer_footer">
+
+      <!-- Avisos: problemas con pedidos y disrupciones activas -->
+      <div id="alert_stack" class="alert_stack"></div>
+
+      <!-- Lo que se elige con un clic en la escena: caja, camión, montacarga, pedido... -->
+      <section id="selection_card" class="selection_card" aria-labelledby="selection_title" hidden>
+        <header class="selection_header">
+          <h2 id="selection_title">Lo que elegiste</h2>
+          <button id="selection_close_button" class="icon_button" type="button" aria-label="Cerrar">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div id="selection_details" class="selection_details"></div>
+      </section>
+
+      <section id="legend_panel" class="legend_panel" aria-labelledby="legend_title" hidden>
+        <h2 id="legend_title">Leyenda</h2>
+        <ul class="legend_list">
+          <li><span class="swatch swatch_complete"></span>Pedido completo</li>
+          <li><span class="swatch swatch_partial"></span>Pedido parcial</li>
+          <li><span class="swatch swatch_alert"></span>Bloqueo o alerta</li>
+          <li><span class="swatch swatch_truck"></span>Camiones (cabezote azul cielo, contenedor blanco con su número)</li>
+        </ul>
+        <p class="legend_subtitle">Color de las cajas por categoría (cada producto, un tono de la misma familia)</p>
+        <ul id="category_legend" class="category_legend"></ul>
+      </section>
+
+      <p id="fps_badge" class="fps_badge" hidden></p>
+      <p id="scene_hint" class="scene_hint" role="status" hidden>Para acercar con la rueda del mouse, mantén Ctrl. Con la rueda sola, la página baja.</p>
+
+      <a id="scroll_button" class="scroll_button" href="#yard_section">
+        <span>Configuración</span>
+        <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+      </a>
+      <p id="live_status" class="visually_hidden" role="status"></p>
+    </div>
+
+    <!-- Barra de secciones: se queda arriba mientras se baja -->
+    <nav id="section_nav" class="section_nav" aria-label="Secciones">
+      <a class="nav_link nav_link_scene" href="#hero"><i class="fa-solid fa-warehouse" aria-hidden="true"></i><span>Bodega</span></a>
+      <a class="nav_link" href="#yard_section">Patio y muelles</a>
+      <a class="nav_link" href="#inventory_section">Inventario</a>
+      <a class="nav_link" href="#dispatch_section">Despachos</a>
+      <a class="nav_link" href="#params_section">Parámetros</a>
+      <a class="nav_link" href="#kpis_section">Indicadores</a>
+      <a class="nav_link" href="#inspector_section">Inspección</a>
+      <a class="nav_link" href="#disruptions_section">Disrupciones</a>
+      <span class="nav_status">
+        <button id="nav_play_button" class="icon_button" type="button" aria-label="Pausar">
+          <i class="fa-solid fa-pause" aria-hidden="true"></i>
+        </button>
+        <time id="nav_clock" class="nav_clock">06:00 · Día 1</time>
+        <a id="nav_alerts" class="nav_alerts" href="#hero" hidden></a>
+      </span>
+    </nav>
+
+    <div class="page_sections">
+      <section id="yard_section" class="page_section" aria-labelledby="yard_title">
+        <h2 id="yard_title">Patio de recibo y muelles</h2>
+        <p class="section_intro">Cuántos camiones llegan, qué muelles se usan, qué mercancía tiene prioridad y las restricciones de cada camión. Lo que cambies en los camiones por franja vale para las franjas que todavía no han empezado.</p>
+        <div id="yard_body"></div>
+      </section>
+
+      <section id="inventory_section" class="page_section" aria-labelledby="inventory_title">
+        <h2 id="inventory_title">Inventario</h2>
+        <p class="section_intro">Empieza en cero: cada caja se anota cuando un camión la suelta en el riel y se descuenta cuando sale en un camión de despacho. Arriba, la mercancía total del centro de distribución, cuánta hay en cada lugar y cuánto cabe.</p>
+        <div class="section_actions">
+          <button id="reset_inventory_button" class="text_button text_button_danger" type="button">
+            <i class="fa-solid fa-boxes-packing" aria-hidden="true"></i>
+            <span>Reiniciar inventario</span>
+          </button>
+          <p class="note">Vacía todo el inventario y vuelve al inicio con los rellenos iniciales en 0. Se conservan la semilla y la configuración del patio.</p>
+        </div>
+        <div id="inventory_body"></div>
+      </section>
+
+      <section id="dispatch_section" class="page_section" aria-labelledby="dispatch_title">
+        <h2 id="dispatch_title">Despachos</h2>
+        <p class="section_intro">Los pedidos salen a cada hora de corte (se pueden cambiar), un camión por ciudad de destino. Aquí se ven lo que está listo para el próximo corte, el informe de los camiones que salieron y la Entrega a Tiempo (OTD), que se puede descargar. También se cierra la entrada de camiones de despacho.</p>
+        <div id="dispatch_body"></div>
+      </section>
+
+      <section id="params_section" class="page_section" aria-labelledby="params_title">
+        <h2 id="params_title">Parámetros</h2>
+        <p class="section_intro">Se aplican al instante, sin reiniciar (salvo los de inicio).</p>
+        <div id="params_body" class="params_grid"></div>
         <button id="factory_reset_button" class="text_button" type="button">
           <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
           <span>Valores de fábrica</span>
         </button>
-      </footer>
-    </aside>
+      </section>
 
-    <aside id="kpis_drawer" class="drawer drawer_right" aria-labelledby="kpis_title" inert>
-      <header class="drawer_header">
+      <section id="kpis_section" class="page_section" aria-labelledby="kpis_title">
         <h2 id="kpis_title">Indicadores</h2>
-        <button class="icon_button" type="button" data-close_drawer="kpis_drawer" aria-label="Cerrar indicadores">
-          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-        </button>
-      </header>
-      <div id="kpis_body" class="drawer_body"></div>
-    </aside>
+        <div id="kpis_body" class="kpis_grid"></div>
+      </section>
 
-    <aside id="inspector_drawer" class="drawer drawer_center" aria-labelledby="inspector_title" inert>
-      <header class="drawer_header">
+      <section id="inspector_section" class="page_section" aria-labelledby="inspector_title">
         <h2 id="inspector_title">Inspección</h2>
-        <button class="icon_button" type="button" data-close_drawer="inspector_drawer" aria-label="Cerrar inspección">
-          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-        </button>
-      </header>
-      <div class="drawer_body">
-        <section class="panel_section" aria-labelledby="selection_title">
-          <h3 id="selection_title">Lo que elegiste</h3>
-          <div id="selection_details">
-            <p class="placeholder">Elige algo en la escena o en la lista de abajo.</p>
+        <p class="section_intro">Busca cualquier camión, pedido, montacarga o banda y elígelo: la vista sube a la bodega y se acerca a él. En la escena también se elige con un clic.</p>
+        <div class="section_actions">
+          <button id="cancel_problems_button" class="text_button text_button_danger" type="button">
+            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+            <span id="cancel_problems_label">Cancelar los pedidos con problema</span>
+          </button>
+          <button id="cancel_all_button" class="text_button text_button_danger" type="button">
+            <i class="fa-solid fa-ban" aria-hidden="true"></i>
+            <span id="cancel_all_label">Cancelar todos los pedidos</span>
+          </button>
+          <p class="note">Cancelación masiva: las cajas de esos pedidos vuelven al stock del activo y sus casillas del muro quedan libres. Los pedidos ya completos, empacados o despachados no se tocan.</p>
+        </div>
+        <div class="inspector_columns">
+          <div>
+            <h3 id="problems_title">Pedidos con problema</h3>
+            <p id="problem_empty" class="placeholder">Ninguno por ahora.</p>
+            <ul id="problem_list" class="item_list"></ul>
           </div>
-        </section>
-        <section class="panel_section" aria-labelledby="problems_title">
-          <h3 id="problems_title">Pedidos con problema</h3>
-          <p id="problem_empty" class="placeholder">Ninguno por ahora.</p>
-          <ul id="problem_list" class="item_list"></ul>
-        </section>
-        <section class="panel_section" aria-labelledby="entities_title">
-          <h3 id="entities_title">Todo lo que hay en la bodega</h3>
-          <label class="visually_hidden" for="entity_search">Buscar en la lista</label>
-          <input id="entity_search" class="search_input" type="search" placeholder="Buscar: camión, pedido 123, piso…" autocomplete="off">
-          <p id="entity_count" class="placeholder"></p>
-          <ul id="entity_list" class="item_list"></ul>
-        </section>
-      </div>
-    </aside>
+          <div>
+            <h3 id="entities_title">Todo lo que hay en la bodega</h3>
+            <label class="visually_hidden" for="entity_search">Buscar en la lista</label>
+            <input id="entity_search" class="search_input" type="search" placeholder="Buscar: camión 4, pedido 123, piso…" autocomplete="off">
+            <p id="entity_count" class="placeholder"></p>
+            <ul id="entity_list" class="item_list"></ul>
+          </div>
+        </div>
+      </section>
 
-    <aside id="disruptions_drawer" class="drawer drawer_center" aria-labelledby="disruptions_title" inert>
-      <header class="drawer_header">
+      <section id="disruptions_section" class="page_section" aria-labelledby="disruptions_title">
         <h2 id="disruptions_title">Disrupciones</h2>
-        <button class="icon_button" type="button" data-close_drawer="disruptions_drawer" aria-label="Cerrar disrupciones">
-          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-        </button>
-      </header>
-      <div class="drawer_body">
-        <p class="placeholder">Actívalas y desactívalas para ver cómo reacciona la bodega.</p>
+        <p class="section_intro">Actívalas y desactívalas para ver cómo reacciona la bodega.</p>
         <div class="disruption_list">
           <button class="disruption_button" type="button" aria-pressed="false" data-disruption="belt_down">
             <i class="fa-solid fa-link-slash" aria-hidden="true"></i>
@@ -174,54 +255,24 @@
           </button>
           <button class="disruption_button" type="button" aria-pressed="false" data-disruption="delayed_truck">
             <i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>
-            <span class="disruption_text"><strong>Camión retrasado</strong><small>El próximo camión de recibo tarda el triple y el muelle espera vacío.</small></span>
+            <span class="disruption_text"><strong>Camión retrasado</strong><small>El próximo camión de recibo tarda el triple en llegar y su muelle espera vacío.</small></span>
           </button>
         </div>
-      </div>
-    </aside>
+      </section>
 
-    <!-- Leyenda -->
-    <section id="legend_panel" class="legend_panel" aria-labelledby="legend_title" hidden>
-      <h2 id="legend_title">Leyenda</h2>
-      <ul class="legend_list">
-        <li><span class="swatch swatch_complete"></span>Pedido completo</li>
-        <li><span class="swatch swatch_partial"></span>Pedido parcial</li>
-        <li><span class="swatch swatch_alert"></span>Bloqueo o alerta</li>
-      </ul>
-      <p class="legend_subtitle">Color de las cajas por producto (SKU)</p>
-      <ul id="sku_legend" class="sku_legend"></ul>
-    </section>
-
-    <!-- Barra inferior -->
-    <nav class="dock" aria-label="Paneles">
-      <button class="dock_button" type="button" data-drawer="params_drawer" aria-expanded="false" aria-controls="params_drawer">
-        <i class="fa-solid fa-sliders" aria-hidden="true"></i><span>Parámetros</span>
-      </button>
-      <button class="dock_button" type="button" data-drawer="kpis_drawer" aria-expanded="false" aria-controls="kpis_drawer">
-        <i class="fa-solid fa-chart-simple" aria-hidden="true"></i><span>Indicadores</span>
-      </button>
-      <button class="dock_button" type="button" data-drawer="inspector_drawer" aria-expanded="false" aria-controls="inspector_drawer">
-        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Inspección</span>
-      </button>
-      <button class="dock_button" type="button" data-drawer="disruptions_drawer" aria-expanded="false" aria-controls="disruptions_drawer">
-        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span>Disrupciones</span>
-      </button>
-      <button id="legend_button" class="dock_button" type="button" aria-expanded="false" aria-controls="legend_panel">
-        <i class="fa-solid fa-palette" aria-hidden="true"></i><span>Leyenda</span>
-      </button>
-      <button id="shortcuts_button" class="dock_button" type="button">
-        <i class="fa-regular fa-keyboard" aria-hidden="true"></i><span>Atajos</span>
-      </button>
-    </nav>
-
-    <footer class="copyright">
-      <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
-    </footer>
+      <footer class="copyright">
+        <p>© 2026 Andres Felipe Olaya - Dev Layer</p>
+      </footer>
+    </div>
 
     <!-- Diálogos -->
     <dialog id="reset_dialog" class="dialog" aria-labelledby="reset_title">
       <h2 id="reset_title">¿Reiniciar la simulación?</h2>
       <p id="reset_text">Se vuelve al inicio con la semilla elegida y se pierde el avance actual.</p>
+      <label id="reset_otd_label" class="check_label" hidden>
+        <input id="reset_otd_check" type="checkbox" checked>
+        <span>Descargar el KPI OTD de esta corrida antes de reiniciar</span>
+      </label>
       <div class="dialog_actions">
         <button id="reset_cancel_button" class="text_button" type="button">Cancelar</button>
         <button id="reset_confirm_button" class="text_button text_button_primary" type="button" autofocus>Reiniciar</button>
@@ -238,22 +289,32 @@
       </div>
     </dialog>
 
+    <dialog id="mass_cancel_dialog" class="dialog" aria-labelledby="mass_cancel_title">
+      <h2 id="mass_cancel_title">Cancelación masiva</h2>
+      <p id="mass_cancel_text"></p>
+      <div class="dialog_actions">
+        <button id="mass_cancel_back_button" class="text_button" type="button">Volver</button>
+        <button id="mass_cancel_confirm_button" class="text_button text_button_danger" type="button" autofocus>Cancelar los pedidos</button>
+      </div>
+    </dialog>
+
     <dialog id="shortcuts_dialog" class="dialog" aria-labelledby="shortcuts_title">
       <form method="dialog">
         <h2 id="shortcuts_title">Atajos de teclado</h2>
         <dl class="shortcut_list">
           <div><dt><kbd>Espacio</kbd></dt><dd>Pausar o reanudar</dd></div>
-          <div><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></dt><dd>Velocidad 1×, 2×, 5× y 10×</dd></div>
+          <div><dt><kbd>1</kbd> … <kbd>7</kbd></dt><dd>Velocidad 1×, 2×, 5×, 10×, 25×, 50× y 100×</dd></div>
           <div><dt><kbd>Q</kbd> <kbd>E</kbd></dt><dd>Girar la vista 90° a la izquierda o derecha</dd></div>
           <div><dt><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd></dt><dd>Mover la vista (con el lienzo enfocado)</dd></div>
           <div><dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Acercar o alejar (con el lienzo enfocado)</dd></div>
+          <div><dt><kbd>Ctrl</kbd> + rueda</dt><dd>Acercar o alejar con el mouse; la rueda sola baja la página</dd></div>
           <div><dt><kbd>Inicio</kbd></dt><dd>Encuadrar toda la bodega (con el lienzo enfocado)</dd></div>
-          <div><dt><kbd>Enter</kbd></dt><dd>Abrir la lista de Inspección (con el lienzo enfocado)</dd></div>
+          <div><dt><kbd>Enter</kbd></dt><dd>Ir a la lista de Inspección (con el lienzo enfocado)</dd></div>
           <div><dt><kbd>M</kbd></dt><dd>Silencio</dd></div>
           <div><dt><kbd>F</kbd></dt><dd>Mostrar u ocultar los cuadros por segundo</dd></div>
           <div><dt><kbd>R</kbd></dt><dd>Reiniciar (pide confirmación)</dd></div>
           <div><dt><kbd>?</kbd></dt><dd>Mostrar esta lista</dd></div>
-          <div><dt><kbd>Esc</kbd></dt><dd>Cerrar paneles y diálogos</dd></div>
+          <div><dt><kbd>Esc</kbd></dt><dd>Cerrar la tarjeta, la leyenda y los diálogos</dd></div>
         </dl>
         <div class="dialog_actions">
           <button class="text_button text_button_primary" type="submit" autofocus>Cerrar</button>

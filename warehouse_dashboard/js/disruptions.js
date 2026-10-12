@@ -15,6 +15,7 @@ export class Disruptions {
     this.spike_ends_at = null;
     this.spike_event_id = null;
     this.maintenance_forklift = null;
+    this.delayed_entry = null;
   }
 
   get spike_active() {
@@ -53,10 +54,13 @@ export class Disruptions {
       }
       sim.orders.reschedule(now);
     } else if (kind === "delayed_truck") {
-      const pending = sim.receiving.pending_arrival;
-      if (pending) {
-        const remaining = Math.max(0, pending.time - now);
-        sim.receiving.move_pending_arrival(now + (on ? remaining * DELAY_FACTOR : remaining / DELAY_FACTOR));
+      if (on) {
+        this.delayed_entry = sim.receiving.schedule.delay_next(now, DELAY_FACTOR);
+        // Sin ningún camión por llegar no hay nada que retrasar
+        if (!this.delayed_entry) this.active.delayed_truck = false;
+      } else if (this.delayed_entry) {
+        sim.receiving.schedule.undo_delay(this.delayed_entry, now);
+        this.delayed_entry = null;
       }
     }
     sim.emit({ type: "disruption_changed", kind, on });
@@ -68,18 +72,18 @@ export class Disruptions {
     if (this.active.order_spike) this.set("order_spike", false, now);
   }
 
-  // Llegó el camión retrasado: la disrupción termina
-  on_truck_arrived() {
-    if (!this.active.delayed_truck) return;
+  // El camión retrasado salió por fin a la carretera: la disrupción termina
+  on_truck_spawned(entry) {
+    if (entry !== this.delayed_entry) return;
+    this.delayed_entry = null;
     this.active.delayed_truck = false;
     this.sim.emit({ type: "disruption_changed", kind: "delayed_truck", on: false });
   }
 
   // El montacarga con menos trabajo termina lo que lleva y va al taller
   set_maintenance(on, now) {
-    const { storage } = this.sim;
     if (on) {
-      const candidates = storage.forklifts.filter((forklift) => !forklift.retiring && forklift.machine.state !== "MAINTENANCE");
+      const candidates = this.sim.forklifts.filter((forklift) => !forklift.retiring && forklift.machine.state !== "MAINTENANCE");
       if (candidates.length === 0) {
         this.active.forklift_maintenance = false;
         return;

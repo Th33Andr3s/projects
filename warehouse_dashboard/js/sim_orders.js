@@ -7,6 +7,8 @@
 
 import { ORDER_SPIKE_FACTOR, SKU_COUNT, WALL_JAM_SECONDS, sku_floor } from "./config.js";
 import { Belt } from "./belts.js";
+import { DESTINATIONS, DESTINATION_WEIGHT_TOTAL } from "./catalog.js";
+import { assigned_cutoff, next_cutoff_after } from "./cutoffs.js";
 import { Order, Wall, Worker } from "./entities.js";
 import { ACTIVE, floor_y, sku_anchor } from "./layout.js";
 import { project_on_path } from "./path_tools.js";
@@ -86,20 +88,81 @@ export class OrdersSystem {
     this.schedule_next_order(now);
   }
 
+  // Cuántas unidades de un producto se pueden pedir todavía: lo que hay en el activo (sin lo ya apartado), en la reserva, en la
+  // bodega de recibo y en camino, menos lo que ya esperan los pedidos que no han empezado a recogerse
+  orderable_boxes(sku_id) {
+    const { storage } = this.sim;
+    let pending = 0;
+    this.floor_queues[sku_floor(sku_id)].forEach((line) => {
+      if (line.sku_id === sku_id) pending += 1;
+    });
+    return storage.available(sku_id) + storage.reserve_boxes(sku_id) + storage.inbound[sku_id] + this.sim.receiving.staged_boxes_of(sku_id) - pending;
+  }
+
+  // Crea un pedido. Si no se dan los productos, se sortean entre los que hay en inventario; si no hay ninguno, no se crea nada.
   create_order(now, sku_ids, replaces = null) {
     const { sim } = this;
     let skus = sku_ids;
     if (!skus) {
-      const count = sim.rng_orders.int(1, sim.config.get("max_order_lines"));
-      skus = sim.rng_orders.shuffle(Array.from({ length: SKU_COUNT }, (_, sku) => sku)).slice(0, count);
+      const candidates = [];
+      for (let sku = 0; sku < SKU_COUNT; sku += 1) {
+        if (this.orderable_boxes(sku) > 0) candidates.push(sku);
+      }
+      if (candidates.length === 0) return null;
+      const count = Math.min(candidates.length, sim.rng_orders.int(1, sim.config.get("max_order_lines")));
+      skus = sim.rng_orders.shuffle(candidates).slice(0, count);
     }
     const order = new Order(sim.next_id("order"), skus, now);
     order.replaces = replaces;
+    order.destination = this.pick_destination();
+    this.assign_cutoff(order, now);
     this.orders.push(order);
     order.lines.forEach((line) => this.floor_queues[sku_floor(line.sku_id)].push(line));
     sim.counters.orders_created += 1;
     sim.emit({ type: "order_created", order });
     return order;
+  }
+
+  // ---------- Destino y corte ----------
+  // Una ciudad de Colombia con acceso por carretera, al azar y con más peso para las ciudades grandes
+  pick_destination() {
+    let pick = this.sim.rng_order_destinations.float(0, DESTINATION_WEIGHT_TOTAL);
+    for (const destination of DESTINATIONS) {
+      pick -= destination.weight;
+      if (pick < 0) return destination;
+    }
+    return DESTINATIONS[DESTINATIONS.length - 1];
+  }
+
+  set_cutoff(order, time) {
+    order.cutoff_at = time;
+    order.cutoff_text = this.sim.format_time(time);
+  }
+
+  // El corte que le toca a un pedido que cae ahora: el primero a más de 60 minutos
+  assign_cutoff(order, now) {
+    order.promised_cutoff = assigned_cutoff(now, this.sim.yard.cutoffs);
+    this.set_cutoff(order, order.promised_cutoff);
+  }
+
+  // Un pedido que no estaba listo a su hora de corte pierde el corte: es un envío tardío y sale en el siguiente
+  mark_late(order, now) {
+    order.late = true;
+    this.set_cutoff(order, next_cutoff_after(now, this.sim.yard.cutoffs, 0));
+  }
+
+  // La persona cambió las horas de corte: los pedidos sin enviar toman el corte que les toca con las horas nuevas
+  reassign_cutoffs(now) {
+    const { cutoffs } = this.sim.yard;
+    this.orders.forEach((order) => {
+      if (order.late) {
+        this.set_cutoff(order, next_cutoff_after(now, cutoffs, 0));
+        return;
+      }
+      order.promised_cutoff = assigned_cutoff(order.created_at, cutoffs);
+      if (order.promised_cutoff <= now) this.mark_late(order, now);
+      else this.set_cutoff(order, order.promised_cutoff);
+    });
   }
 
   // ---------- Stock y líneas ----------
@@ -347,7 +410,11 @@ export class OrdersSystem {
     sim.emit({ type: "order_cancelled", order });
 
     let new_order = null;
-    if (reprocess) new_order = this.create_order(now, sku_ids, order.id);
+    if (reprocess) {
+      new_order = this.create_order(now, sku_ids, order.id);
+      // Es el mismo cliente: el pedido reprocesado va al mismo destino
+      if (new_order) new_order.destination = order.destination;
+    }
     this.orders = this.orders.filter((candidate) => candidate !== order);
     sim.finished_orders.push(order);
     return { ok: true, order, new_order };

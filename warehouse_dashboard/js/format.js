@@ -2,6 +2,14 @@
 
 const number_formatter = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 });
 
+const datetime_formatter = new Intl.DateTimeFormat("es-CO", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+
+// La fecha y hora de un momento de la simulación: `start_ms` es el instante (en milisegundos UTC, con la hora como si fuera
+// local) en que arranca el reloj simulado, y `seconds` lo que ha pasado desde entonces. Resultado: "lun, 12 oct 2026, 06:35".
+export function format_sim_datetime(start_ms, seconds) {
+  return datetime_formatter.format(new Date(start_ms + seconds * 1000));
+}
+
 // El reloj simulado junto al día: "06:00 · Día 1"
 export function format_clock_display(clock_text, day) {
   return `${clock_text} · Día ${day}`;

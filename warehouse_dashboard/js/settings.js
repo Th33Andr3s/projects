@@ -1,4 +1,4 @@
-// Lo que la página recuerda entre visitas: los valores de los sliders, la semilla, la velocidad y el silencio. Va en
+// Lo que la página recuerda entre visitas: los valores de los sliders, la configuración del patio, la semilla, la velocidad y el silencio. Va en
 // `localStorage` con el nombre del proyecto como prefijo (para no pisarse con otros proyectos del mismo dominio) y toda lectura o
 // escritura va dentro de try/catch: en modo privado o con el almacenamiento bloqueado puede fallar, y la página sigue igual.
 
@@ -16,6 +16,7 @@ export function load_settings() {
     if (!data || typeof data !== "object") return {};
     const settings = {};
     if (data.params && typeof data.params === "object") settings.params = data.params;
+    if (data.yard && typeof data.yard === "object") settings.yard = data.yard;
     if (Number.isInteger(data.seed) && data.seed >= 0 && data.seed <= SEED_MAX) settings.seed = data.seed;
     if (SPEED_FACTORS.includes(data.speed)) settings.speed = data.speed;
     if (typeof data.muted === "boolean") settings.muted = data.muted;

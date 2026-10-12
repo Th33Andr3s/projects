@@ -4,38 +4,90 @@
 // Sistema de coordenadas: x crece hacia la derecha (el flujo va de izquierda a derecha), z crece hacia "delante" (hacia
 // quien mira) e y hacia arriba. El origen está en el centro del recorrido.
 //
-// Las cantidades que la persona cambia con sliders (muelles, puertas, muros, casillas, estaciones) entran a `build_layout` y
-// el diseño las acomoda; el resto es fijo.
+// Los muelles de recepción son siempre 10. Las cantidades que la persona cambia con sliders (puertas, muros, casillas,
+// estaciones) entran a `build_layout` y el diseño las acomoda; el resto es fijo.
 
-import { FLOOR_COUNT, PARAMETERS, SKU_COUNT, SKUS_PER_FLOOR, sku_floor } from "./config.js";
+import { DOCK_COUNT, FLOOR_COUNT, PARAMETERS, SKU_COUNT, SKUS_PER_FLOOR, sku_floor } from "./config.js";
 import { make_path } from "./path_tools.js";
+import { Rng } from "./rng.js";
 
-// ---- Terreno y edificio ----
-export const SITE = { x0: -90, x1: 105, z0: -52, z1: 34 };
+// ---- Terreno, predio y edificio ----
+// El terreno es enorme (las carreteras salen de la pantalla en cualquier equipo); SITE es lo que se encuadra al inicio y por
+// donde se mueve la cámara: el predio con su carretera perimetral, y los clientes al norte.
+export const WORLD = { half_size: 900 };
+export const SITE = { x0: -145, x1: 129, z0: -80, z1: 58 };
+// El predio es un rectángulo cerrado con vallas de alambre; solo se entra por las dos garitas con talanquera
+export const COMPOUND = { x0: -126, x1: 110, z0: -40, z1: 40 };
 export const BUILDING = { x0: -53, x1: 78, z0: -30, z1: 30 };
 // Los muros del edificio son bajos (corte de maqueta) para que nunca tapen lo de adentro, gire como gire la cámara
 export const BUILDING_WALL_HEIGHT = 1.4;
 // La altura a la que van las bandas sobre el piso de cada nivel
 export const BELT_HEIGHT = 0.9;
 
+// ---- Carreteras ----
+// La carretera perimetral rodea la valla a RING_OFFSET metros; cuatro carreteras salen de ella hasta el borde del mundo. Los
+// camiones de recibo llegan y se van por la del oeste; los de despacho, por la del este. Se maneja por la derecha.
+export const ROAD_WIDTH = 10;
+export const RING_OFFSET = 14;
+export const ROAD_END = 420;
+export const ROAD_NORTH_SOUTH_X = -60;
+// Por dónde llegan y salen los camiones, a lo largo de x, cuando no están en una garita
+export const ROAD_SPAWN_X = 400;
+
+// Cada garita: la talanquera está en `x` y cada carril tiene el punto donde el camión se detiene antes de la talanquera
+export const GATES = {
+  west: { id: "west", label: "Entrada de camiones", x: COMPOUND.x0, in_lane_z: 3.5, out_lane_z: -3.5, in_stop_x: COMPOUND.x0 - 7, out_stop_x: COMPOUND.x0 + 7 },
+  east: { id: "east", label: "Acceso de despacho", x: COMPOUND.x1, in_lane_z: -3.5, out_lane_z: 3.5, in_stop_x: COMPOUND.x1 + 7, out_stop_x: COMPOUND.x1 - 7 },
+};
+
 // ---- Zonas con letrero ----
-// kind: indoor (bajo techo), yard (patio de asfalto), road (vía) o customers (afuera, fuera de la bodega).
+// kind: indoor (bajo techo), yard (patio de asfalto), gate (garita) o customers (afuera, fuera del predio).
 // sign: dónde queda el poste del letrero (x, z) y a qué altura (y) flota el rótulo. priority: si dos rótulos se pisan en
 // pantalla, el de mayor prioridad se queda donde está y el otro se corre hacia arriba.
 export const ZONES = [
-  { id: "road_in", label: "Vía de acceso", kind: "road", priority: 2, x0: -90, x1: -75, z0: -7, z1: 7, sign: { x: -82, z: 0, y: 5 } },
-  { id: "yard", label: "Patio de recibo y muelles", kind: "yard", priority: 8, x0: -75, x1: -53, z0: -30, z1: 30, sign: { x: -64, z: 0, y: 11 } },
-  { id: "receiving", label: "Recibo (rieles)", kind: "indoor", priority: 9, x0: -53, x1: -39, z0: -30, z1: 30, sign: { x: -46, z: 0, y: 5 } },
+  { id: "gate_west", label: "Entrada de camiones", kind: "gate", priority: 3, x0: -138, x1: -118, z0: -8, z1: 8, sign: { x: -131, z: -9, y: 7 } },
+  { id: "parking", label: "Parqueadero de camiones", kind: "yard", priority: 8, x0: -124, x1: -86, z0: -24, z1: 24, sign: { x: -105, z: 25, y: 7 } },
+  { id: "yard", label: "Patio de recibo y muelles", kind: "yard", priority: 9, x0: -86, x1: -53, z0: -38, z1: 38, sign: { x: -70, z: -36, y: 8 } },
+  { id: "receiving", label: "Recibo (rieles)", kind: "indoor", priority: 9, x0: -53, x1: -39, z0: -30, z1: 25, sign: { x: -46, z: 0, y: 5 } },
   { id: "reserve", label: "Racks de reserva", kind: "indoor", priority: 11, x0: -39, x1: -13, z0: -30, z1: 4, sign: { x: -26, z: -23, y: 9 } },
   { id: "active", label: "Multinivel activo", kind: "indoor", priority: 12, x0: -9, x1: 19, z0: -23, z1: -9, sign: { x: 5, z: -25, y: 19 } },
-  { id: "workshop", label: "Taller de montacargas", kind: "indoor", priority: 3, x0: -37, x1: -27, z0: 16, z1: 28, sign: { x: -32, z: 22, y: 4 } },
+  { id: "staging", label: "Bodega de recibo (stock)", kind: "indoor", priority: 10, x0: -38, x1: -4, z0: 8, z1: 24.5, sign: { x: -21, z: 9, y: 7 } },
+  { id: "workshop", label: "Taller de montacargas", kind: "indoor", priority: 3, x0: -52, x1: -19, z0: 26, z1: 29.8, sign: { x: -35.5, z: 27.9, y: 4 } },
   { id: "walls", label: "Muros de consolidación", kind: "indoor", priority: 10, x0: 24, x1: 40, z0: -30, z1: 30, sign: { x: 38, z: -26, y: 11 } },
   { id: "packing", label: "Empaque", kind: "indoor", priority: 7, x0: 40, x1: 56, z0: -30, z1: 30, sign: { x: 53, z: -26, y: 5 } },
   { id: "dispatch", label: "Despacho y puertas", kind: "indoor", priority: 6, x0: 56, x1: 78, z0: -30, z1: 30, sign: { x: 66, z: -26, y: 10 } },
-  { id: "exit_yard", label: "Patio de salida", kind: "yard", priority: 5, x0: 78, x1: 98, z0: -30, z1: 30, sign: { x: 90, z: 0, y: 5 } },
-  { id: "road_out", label: "Vía de salida", kind: "road", priority: 1, x0: 98, x1: 105, z0: -7, z1: 7, sign: { x: 102, z: 0, y: 9 } },
-  { id: "customers", label: "Clientes / e-commerce", kind: "customers", priority: 4, x0: -24, x1: 24, z0: -50, z1: -36, sign: { x: 0, z: -43, y: 7 } },
+  { id: "exit_yard", label: "Patio de salida", kind: "yard", priority: 5, x0: 78, x1: 108, z0: -38, z1: 38, sign: { x: 92, z: 30, y: 6 } },
+  { id: "gate_east", label: "Acceso de despacho", kind: "gate", priority: 2, x0: 100, x1: 120, z0: -8, z1: 8, sign: { x: 114, z: 9, y: 7 } },
+  { id: "customers", label: "Clientes / e-commerce", kind: "customers", priority: 4, x0: 0, x1: 48, z0: -76, z1: -62, sign: { x: 24, z: -69, y: 7 } },
 ];
+
+// ---- Bodega de recibo (stock) ----
+// Una sala grande al sur de los racks, pegada a los rieles de los muelles. Toda la mercancía que baja de los camiones llega aquí en
+// pallets de descarga (las montacargas de muelle a stock) y de aquí se arman los pallets y las cubetas que llevan las montacargas de
+// stock a los racks y al multinivel. Una pila por producto: una fila por categoría (el piso del activo) y una columna por producto.
+// Al norte de las pilas hay una franja de armado con los puestos de pallets y de cubetas.
+export const STAGING = { x0: -38, x1: -4, z0: 8, z1: 24.5, columns: 4, rows: 5, pitch_x: 8.2, pitch_z: 2.4, pile_width: 3.4, pile_depth: 2.2, first_x: -33.4, first_z: 13.2 };
+export function staging_slot(sku_id) {
+  const row = sku_id % STAGING.rows;
+  const column = Math.floor(sku_id / STAGING.rows);
+  return { x: STAGING.first_x + column * STAGING.pitch_x, z: STAGING.first_z + row * STAGING.pitch_z };
+}
+// La franja de armado (norte de la bodega): diez puestos de pallet y cinco de cubeta, en una sola fila
+export const ARMADO_Z = 9.4;
+export const PALLET_SPOTS = Array.from({ length: 10 }, (_, index) => ({ x: -36.6 + index * 2.1, z: ARMADO_Z }));
+export const TOTE_STATIONS = Array.from({ length: 5 }, (_, index) => ({ x: -15.6 + index * 2.1, z: ARMADO_Z }));
+// Los andenes donde las montacargas de muelle a stock descargan, sobre la pared oeste de la bodega
+export const UNLOAD_BAYS = [13.2, 15.6, 18, 20.4, 22.8].map((z) => ({ x: -36.8, z }));
+
+// ---- Pilas de despacho por destino ----
+// Los paquetes empacados esperan su corte en una pila por ciudad de destino, en la zona de despacho entre la banda y las puertas:
+// tres columnas por nueve filas, con las ciudades en el orden del catálogo (por región).
+export const DISPATCH_BINS = { columns: 3, rows: 9, first_x: 62.5, pitch_x: 5, first_z: -24, pitch_z: 6, size: 3.6 };
+export function dispatch_bin_slot(index) {
+  const column = Math.floor(index / DISPATCH_BINS.rows);
+  const row = index % DISPATCH_BINS.rows;
+  return { x: DISPATCH_BINS.first_x + column * DISPATCH_BINS.pitch_x, z: DISPATCH_BINS.first_z + row * DISPATCH_BINS.pitch_z };
+}
 
 // ---- Reserva (racks de pallets) ----
 export const RESERVE = {
@@ -152,32 +204,51 @@ export function spiral_point(t) {
 // ---- Camiones ----
 export const TRUCK = { length: 11, width: 2.6, height: 3.4 };
 
-// ---- Red de los montacargas ----
-// Un eje vertical entre recibo y reserva (el troncal), un pasillo horizontal por cada cara de rack (el de cada ubicación está en
-// `reserve_positions`), un carril cruzado por delante de los racks hasta la mesa de reabasto, y el parqueo en el taller.
+// ---- Red de las montacargas ----
+// De muelle a stock: un carril norte-sur pegado a los rieles (A_LANE_X) y, por el sur, el carril del taller. De stock a racks y
+// multinivel: un eje norte-sur entre la bodega y los racks (el troncal), un pasillo horizontal por cada cara de rack (el de cada
+// ubicación está en `reserve_positions`), un carril cruzado por delante de los racks, un carril al frente de la franja de armado y
+// un pasillo entre los racks y el multinivel que sube hasta el elevador.
 export const TRUNK_X = -39.3;
 export const CROSS_LANE_Z = 1.2;
-// Donde un montacarga deja el pallet que se va a desarmar en cubetas para reabastecer el activo
-export const UNLOAD_POINT = { x: -14.5, z: -0.8 };
-// El eje de la banda de cubetas que lleva al elevador
-export const TOTE_CONVEYOR_Z = -3;
-export const TOTE_CONVEYOR_START_X = -40.5;
-// Dónde se forman los pallets en recibo, entre rieles
-export const PALLET_SPOT_X = -44.5;
-// En cada hueco entre rieles caben tres pallets en fila, a 1,8 m uno del otro, todos con la salida libre hacia el troncal
-export const PALLET_SPOT_ZS = [-26, -17.333, -8.667, 0, 8.667, 17.333, 26].flatMap((center) => [center - 1.8, center, center + 1.8]);
-// Las cubetas de entrada que se van llenando en recibo, una por piso
-export const TOTE_STATION_X = -40.8;
-export const TOTE_STATION_ZS = [-10.4, -9.25, -8.1, -6.95, -5.8];
-// Parqueo de montacargas en el taller
-export const PARK_SPOTS = Array.from({ length: 8 }, (_, index) => ({ x: -35.4 + (index % 4) * 2.4, z: 19.5 + Math.floor(index / 4) * 4 }));
+export const FRONT_LANE_Z = 6;
+export const A_LANE_X = -41.9;
+export const GARAGE_LANE_Z = 25.2;
+// El pasillo entre los racks y el multinivel: un carril para las cubetas (hacia el elevador) y otro para los pallets de reabasto
+export const TOTE_LANE_X = -12.2;
+export const REPLEN_LANE_X = -10;
+// Donde se deja la cubeta para el elevador, y donde se deja el pallet que se va a desarmar en cubetas
+export const ELEVATOR_DOOR = { x: -12.2, z: -13.8 };
+export const UNLOAD_POINT = { x: REPLEN_LANE_X, z: -8 };
+// Los puestos de pallet de descarga, al final de cada riel
+export const DOCK_ZS = spread(DOCK_COUNT, -27, 27);
+// El taller: diez puestos para las montacargas de muelle a stock y diez para las de stock a racks y multinivel, en una fila
+export const PARK_SPOTS_DOCK = Array.from({ length: 10 }, (_, index) => ({ x: -51 + index * 1.6, z: 27.9 }));
+export const PARK_SPOTS_STOCK = Array.from({ length: 10 }, (_, index) => ({ x: -34.8 + index * 1.6, z: 27.9 }));
+
+// ---- Parqueadero de camiones ----
+// Dos columnas de 10 plazas a los lados de un pasillo norte-sur, con un hueco al centro para el carril de entrada. Los camiones
+// entran de frente a su plaza; las plazas se numeran en el orden en que se llenan: primero la columna de la entrada, alternando
+// norte y sur desde el centro hacia afuera.
+export const PARKING = { aisle_x: -105, left_x: -117, right_x: -93, bay_width: 3.4, yard_lane_x: -83, pivot_x: -74 };
+const PARKING_ROWS_Z = [-6.6, 6.6, -10.2, 10.2, -13.8, 13.8, -17.4, 17.4, -21, 21];
+
+export function parking_bays() {
+  const bays = [];
+  [["left", PARKING.left_x, Math.PI], ["right", PARKING.right_x, 0]].forEach(([side, x, yaw]) => {
+    PARKING_ROWS_Z.forEach((z) => {
+      const number = bays.length + 1;
+      bays.push({ index: number - 1, id: `bay_${number}`, number, side, x, z, yaw });
+    });
+  });
+  return bays;
+}
 
 // La cantidad máxima de cada estructura que se puede abrir con los sliders. La bodega se dibuja siempre con todas; la
 // simulación decide cuántas están en servicio y las demás se muestran cerradas.
 export function max_counts() {
   const maximum = (key) => PARAMETERS.find((parameter) => parameter.key === key).max;
   return {
-    dock_count: maximum("dock_count"),
     door_count: maximum("door_count"),
     wall_count: maximum("wall_count"),
     slots_per_wall: maximum("slots_per_wall"),
@@ -198,30 +269,23 @@ function belt(id, kind, points) {
 
 // ---- La bodega completa para unas cantidades dadas ----
 export function build_layout(counts = max_counts()) {
-  const { dock_count, door_count, wall_count, slots_per_wall, pack_station_count } = counts;
+  const { door_count, wall_count, slots_per_wall, pack_station_count } = counts;
 
   // Muelles de recibo en el muro izquierdo del edificio, con su riel hacia adentro
-  const docks = spread(dock_count, -26, 26).map((z, index) => ({
+  const docks = DOCK_ZS.map((z, index) => ({
     id: `dock_${index + 1}`,
     x: BUILDING.x0,
     z,
     // Donde queda el centro del camión: de reversa contra el muelle, con el cabezote hacia el patio
     truck_x: BUILDING.x0 - 0.9 - TRUCK.length / 2,
     // Desde dónde empieza a dar reversa, después de girar
-    approach_x: -67,
+    approach_x: PARKING.pivot_x,
     rail_start: { x: BUILDING.x0, y: 1.3, z },
-    rail_end: { x: -43.5, y: BELT_HEIGHT, z },
+    rail_end: { x: -45, y: BELT_HEIGHT, z },
+    // Dos puestos de pallet de descarga al pie del riel: mientras uno espera montacarga, las cajas siguen llegando al otro
+    pallet_spot: { x: -43.8, z },
+    pallet_spots: [{ x: -43.8, z }, { x: -43.8, z: z + 1.9 }],
   }));
-
-  // Lugares de espera en el patio, en una fila a lo largo de x = -70 (la cola visible)
-  const queue_spots = spread(8, -27, 27).map((z, index) => ({ id: `queue_${index + 1}`, x: -70, z }));
-
-  // Banda de cubetas del 30 % directo al activo: sale de recibo, cruza por el pasillo de adelante y entra al elevador
-  const tote_conveyor = belt("tote_conveyor", "tote_in", [
-    { x: TOTE_CONVEYOR_START_X, y: BELT_HEIGHT, z: TOTE_CONVEYOR_Z },
-    { x: ELEVATOR.x, y: BELT_HEIGHT, z: TOTE_CONVEYOR_Z },
-    { x: ELEVATOR.x, y: BELT_HEIGHT, z: ELEVATOR.z },
-  ]);
 
   // Bandas de piso: una por piso, por el pasillo central hasta el lado oeste de la espiral
   const floor_belts = Array.from({ length: ACTIVE.floors }, (_, floor) =>
@@ -325,29 +389,22 @@ export function build_layout(counts = max_counts()) {
     approach_x: 95,
   }));
 
-  // La vía de salida: del patio al borde derecho del mapa
-  const exit_path = [
-    { x: 96, z: 0 },
-    { x: SITE.x1, z: 0 },
-  ];
-
-  const belts = [tote_conveyor, ...floor_belts, main_belt, wall_out_west, wall_out_east, pack_feed, pack_out, dispatch_belt, ...doors.map((door) => door.lane)];
+  const belts = [...floor_belts, main_belt, wall_out_west, wall_out_east, pack_feed, pack_out, dispatch_belt];
 
   return {
     site: SITE,
     building: BUILDING,
     zones: ZONES,
     docks,
-    queue_spots,
+    parking_bays: parking_bays(),
     walls,
     pack_stations,
     doors,
     belts,
-    exit_path,
-    workshop: { x: -32, z: 22 },
+    workshop: { x: -35.5, z: 27.9 },
     // Cuántas ubicaciones tiene cada estructura, para comprobar que lo dibujado coincide con lo simulado
     counts: {
-      dock_count,
+      dock_count: DOCK_COUNT,
       door_count,
       wall_count,
       slots_per_wall,
@@ -376,7 +433,6 @@ export function build_belt_paths(layout) {
   const main_points = [...spiral_points, ...belt_by_id.get("main_belt").points.slice(1)];
   return {
     rails: layout.docks.map((dock) => make_path([dock.rail_start, dock.rail_end])),
-    tote_conveyor: make_path(belt_by_id.get("tote_conveyor").points),
     floor_belts: layout.belts.filter((item) => item.kind === "floor").map((item) => make_path(item.points)),
     // El índice de cada vuelta de la espiral donde entra la banda de cada piso: de arriba hacia abajo
     main_chain: make_path(main_points),
@@ -385,4 +441,46 @@ export function build_belt_paths(layout) {
     dispatch_chain: make_path(joined("pack_out", "dispatch_belt")),
     door_lanes: layout.doors.map((door) => make_path(door.lane.points)),
   };
+}
+
+// ---- Carreteras y árboles (solo decoración del terreno) ----
+// Los rectángulos de asfalto de las carreteras: la perimetral, las cuatro que salen hasta el borde del mundo y los accesos a
+// las garitas. `axis` es hacia dónde corre la línea central discontinua.
+export function road_segments() {
+  const half = ROAD_WIDTH / 2;
+  const ring_x0 = COMPOUND.x0 - RING_OFFSET;
+  const ring_x1 = COMPOUND.x1 + RING_OFFSET;
+  const ring_z0 = COMPOUND.z0 - RING_OFFSET;
+  const ring_z1 = COMPOUND.z1 + RING_OFFSET;
+  return [
+    { id: "ring_north", axis: "x", x0: ring_x0 - half, x1: ring_x1 + half, z0: ring_z0 - half, z1: ring_z0 + half },
+    { id: "ring_south", axis: "x", x0: ring_x0 - half, x1: ring_x1 + half, z0: ring_z1 - half, z1: ring_z1 + half },
+    { id: "ring_west", axis: "z", x0: ring_x0 - half, x1: ring_x0 + half, z0: ring_z0 - half, z1: ring_z1 + half },
+    { id: "ring_east", axis: "z", x0: ring_x1 - half, x1: ring_x1 + half, z0: ring_z0 - half, z1: ring_z1 + half },
+    { id: "spur_west", axis: "x", x0: -ROAD_END, x1: ring_x0 - half, z0: -half, z1: half },
+    { id: "spur_east", axis: "x", x0: ring_x1 + half, x1: ROAD_END, z0: -half, z1: half },
+    { id: "spur_north", axis: "z", x0: ROAD_NORTH_SOUTH_X - half, x1: ROAD_NORTH_SOUTH_X + half, z0: -ROAD_END, z1: ring_z0 - half },
+    { id: "spur_south", axis: "z", x0: ROAD_NORTH_SOUTH_X - half, x1: ROAD_NORTH_SOUTH_X + half, z0: ring_z1 + half, z1: ROAD_END },
+    { id: "access_west", axis: "x", x0: ring_x0 + half, x1: COMPOUND.x0, z0: -half, z1: half },
+    { id: "access_east", axis: "x", x0: COMPOUND.x1, x1: ring_x1 - half, z0: -half, z1: half },
+  ];
+}
+
+// Árboles repartidos con una semilla fija (no con el azar del navegador), lejos del predio, las carreteras y los clientes
+export function build_trees(count = 520) {
+  const rng = new Rng(20260711);
+  const margin = RING_OFFSET + ROAD_WIDTH / 2 + 5;
+  const half = ROAD_WIDTH / 2 + 3;
+  const trees = [];
+  for (let attempt = 0; attempt < count * 40 && trees.length < count; attempt += 1) {
+    const x = rng.float(-300, 300);
+    const z = rng.float(-240, 240);
+    const near_compound = x > COMPOUND.x0 - margin && x < COMPOUND.x1 + margin && z > COMPOUND.z0 - margin && z < COMPOUND.z1 + margin;
+    const near_east_west_road = Math.abs(z) < half;
+    const near_north_south_road = Math.abs(x - ROAD_NORTH_SOUTH_X) < half;
+    const near_customers = x > -8 && x < 56 && z > -84 && z < -54;
+    if (near_compound || near_east_west_road || near_north_south_road || near_customers) continue;
+    trees.push({ x, z, scale: rng.float(0.8, 1.5), tint: rng.float(0.82, 1.12) });
+  }
+  return trees;
 }

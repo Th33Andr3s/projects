@@ -2,9 +2,10 @@
 // cuando la persona elige algo, cancela un pedido, activa una disrupción, reinicia con otra semilla o vuelve a los valores de
 // fábrica, y se guardan y recuperan los ajustes.
 
-import { Config, DEFAULT_SEED } from "./config.js";
+import { Config, DEFAULT_SEED, SIM_START_HOUR } from "./config.js";
 import { SimClock } from "./sim_clock.js";
 import { build_layout } from "./layout.js";
+import { YardConfig } from "./yard_config.js";
 import { Simulation } from "./simulation.js";
 import { start_animation_loop, start_scene } from "./animations.js";
 import { attach_camera_controls } from "./camera_controls.js";
@@ -31,11 +32,20 @@ const audio = create_audio();
 // La bodega se dibuja siempre con todo lo que los sliders pueden abrir; la simulación decide qué está en servicio
 const layout = build_layout();
 
+const yard = new YardConfig();
 const saved = load_settings();
 if (saved.params) config.load(saved.params);
+if (saved.yard) yard.load(saved.yard);
+
+// El día 1 es hoy y arranca a las 6 de la mañana. Las fechas de los camiones se escriben con el reloj de la persona, así que se
+// usa Date.UTC con las partes locales: así no hay saltos por zona horaria ni por cambio de hora.
+function today_start_ms() {
+  const today = new Date();
+  return Date.UTC(today.getFullYear(), today.getMonth(), today.getDate(), SIM_START_HOUR, 0, 0);
+}
 
 let seed = saved.seed === undefined ? DEFAULT_SEED : saved.seed;
-let sim = new Simulation(config, layout, seed);
+let sim = new Simulation(config, yard, layout, seed, today_start_ms());
 let is_muted = saved.muted === true;
 let is_fps_visible = false;
 let scene = null;
@@ -61,20 +71,24 @@ function request_save() {
 
 function save_now() {
   save_pending = false;
-  save_settings({ params: config.to_json(), seed, speed: clock.speed_factor, muted: is_muted });
+  save_settings({ params: config.to_json(), yard: yard.to_json(), seed, speed: clock.speed_factor, muted: is_muted });
 }
 
 config.subscribe(request_save);
+yard.subscribe(request_save);
 
 // Elegir algo (con un clic en la escena o desde una lista): se resalta, se muestra su detalle y, si viene de una lista o de
 // un aviso, la vista se acerca a donde está
 function select_entity(entity, move_camera) {
   if (scene) scene.entities.set_selected(entity);
   ui.show_selection(entity, sim.now);
-  if (entity && move_camera && scene && entity.x !== undefined) scene.focus(entity.x, entity.z);
+  if (!entity || !move_camera) return;
+  // Si se eligió desde una lista de abajo, la página sube a la bodega y la vista se acerca a lo elegido
+  ui.reveal_scene();
+  if (scene && entity.x !== undefined) scene.focus(entity.x, entity.z);
 }
 
-const ui = create_ui(config, {
+const ui = create_ui(config, yard, {
   on_toggle_play() {
     clock.paused = !clock.paused;
     ui.set_playing(!clock.paused);
@@ -86,21 +100,27 @@ const ui = create_ui(config, {
     ui.announce(`Velocidad ${factor}×.`);
     request_save();
   },
-  on_reset(new_seed) {
+  on_reset(new_seed, empty_inventory = false) {
     seed = new_seed;
+    // Reiniciar el inventario: sin relleno inicial, para que de verdad empiece en cero
+    if (empty_inventory) {
+      config.set("initial_active_fill", 0);
+      config.set("initial_reserve_fill", 0);
+    }
     clock.reset();
     sim.dispose();
-    sim = new Simulation(config, layout, seed);
+    sim = new Simulation(config, yard, layout, seed, today_start_ms());
     if (scene) scene.attach_simulation(sim);
     ui.set_playing(true);
     ui.set_speed(1);
     ui.reset_panels(sim);
     ui.update(sim, real_time * 1000);
-    ui.announce(`Simulación reiniciada con la semilla ${seed}.`);
+    ui.announce(empty_inventory ? `Inventario en cero. Simulación reiniciada con la semilla ${seed}.` : `Simulación reiniciada con la semilla ${seed}.`);
     request_save();
   },
   on_factory_reset() {
     config.reset();
+    yard.reset();
     clock.set_speed(1);
     ui.set_speed(1);
     seed = DEFAULT_SEED;
@@ -134,9 +154,25 @@ const ui = create_ui(config, {
   on_select(entity) {
     select_entity(entity, true);
   },
+  on_send_trucks(count) {
+    const entries = sim.receiving.schedule.add_manual(count, sim.now);
+    const first = entries[0].id;
+    const last = entries[entries.length - 1].id;
+    ui.announce(
+      `${count === 1 ? "Llega 1 camión" : `Llegan ${count} camiones`} ahora (${count === 1 ? `el ${first}` : `del ${first} al ${last}`}).${clock.paused ? " La simulación está en pausa: salen al reanudar." : ""}`,
+    );
+    ui.update(sim, real_time * 1000);
+    return count;
+  },
   on_toggle_disruption(kind) {
     sim.disruptions.toggle(kind, sim.now);
     ui.update(sim, real_time * 1000);
+  },
+  on_cancel_orders(scope) {
+    const count = sim.cancel_orders(scope);
+    ui.announce(count === 0 ? "No había pedidos para cancelar." : `${count} ${count === 1 ? "pedido cancelado" : "pedidos cancelados"}. Sus cajas volvieron al stock.`);
+    ui.update(sim, real_time * 1000);
+    ui.refresh_list(sim);
   },
   on_cancel_order(order_id, reprocess) {
     const result = sim.cancel_order(order_id, reprocess);
@@ -183,7 +219,7 @@ function track_fps(dt) {
 function update_audio() {
   const belts = sim.belts.filter((belt) => belt.kind !== "rail");
   const working = belts.filter((belt) => belt.is_running && belt.count > 0).length;
-  const reversing = sim.storage.forklifts.some((forklift) => forklift.is_reversing);
+  const reversing = sim.forklifts.some((forklift) => forklift.is_reversing);
   audio.update({ running_belts_ratio: belts.length > 0 ? (working / belts.length) * 2.2 : 0, reversing, paused: clock.paused });
 }
 
@@ -250,6 +286,7 @@ async function start() {
     const hit = controller.pick(ndc_x, ndc_y);
     select_entity(hit ? hit.entity : null, false);
   };
+  controller.on_wheel_hint = () => ui.show_wheel_hint();
   camera_controls = attach_camera_controls(controller);
 
   new ResizeObserver(() => controller.resize()).observe(container);

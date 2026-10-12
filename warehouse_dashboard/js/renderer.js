@@ -73,6 +73,9 @@ export function build_renderer(THREE, { canvas, container, layout, reduced_motio
   const sign_order = [...static_scene.signs].sort((first, second) => second.priority - first.priority);
 
   function place_signs(meters_per_pixel) {
+    // Los números de los muelles son círculos pequeños que se ven del mismo tamaño en pantalla
+    const dock_label_size = (width < NARROW_VIEWPORT_PIXELS ? 18 : 24) * meters_per_pixel;
+    static_scene.dock_labels.forEach((label) => label.sprite.scale.set(dock_label_size, dock_label_size, 1));
     camera.updateMatrixWorld(true);
     sign_up.setFromMatrixColumn(camera.matrixWorld, 1);
     const placed = [];
@@ -201,7 +204,7 @@ export function build_renderer(THREE, { canvas, container, layout, reduced_motio
 
   function dispose() {
     entities.dispose();
-    static_scene.signs.forEach((sign) => {
+    static_scene.signs.concat(static_scene.dock_labels).forEach((sign) => {
       sign.sprite.material.map.dispose();
       sign.sprite.material.dispose();
     });

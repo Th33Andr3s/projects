@@ -29,7 +29,7 @@ Se puede pausar, acelerar (1×, 2×, 5×, 10×), reiniciar con una semilla (la m
 | Librerías | Solo Three.js 0.170.0 con el `importmap` de CLAUDE.md 2.3 (más Font Awesome 6.7.2 para los iconos de la interfaz). Si el CDN falla, un mensaje claro lo dice en pantalla (no hay plano 2D de respaldo: sin 3D este proyecto no tiene sentido) |
 | Pantallas | Escritorio como pide el encargo (tres paneles: parámetros, KPIs e inspección) y, en celular, los paneles se pliegan en cajones que se abren con un botón. Todo operable con teclado, con foco visible (CLAUDE.md 1.5) |
 | Aleatoriedad | **Nunca `Math.random`.** Todo pasa por la clase `Rng` con semilla. Cada subsistema (llegadas de camiones, pedidos, reparto 70/30, líneas de pedido) usa su propio flujo derivado de la semilla, para que mover un slider de uno no cambie los números que salen en otro |
-| Reloj | El reloj simulado es independiente del real. A 1× pasan **6 segundos simulados por segundo real** (`base_time_scale`, ajustable en `config.js`): así la primera tractomula llega en menos de 30 s simulados (unos 5 s reales) y una salida de camión cada 12 minutos simulados se ve cada 2 minutos reales. Las velocidades de bandas, montacargas y personas se escriben en metros por segundo simulado y se eligen para que a 1× se vean a un ritmo agradable |
+| Reloj | El reloj simulado es independiente del real. A 1× pasan **4 segundos simulados por segundo real** (eran 6 antes de la ronda 14) (`base_time_scale`, ajustable en `config.js`): así la primera tractomula llega en menos de 30 s simulados (unos 5 s reales) y una salida de camión cada 12 minutos simulados se ve cada 2 minutos reales. Las velocidades de bandas, montacargas y personas se escriben en metros por segundo simulado y se eligen para que a 1× se vean a un ritmo agradable |
 | Motor | Híbrido: una **cola de eventos** (llegadas, fin de tareas, salidas por horario, fin de disrupciones) y un **paso continuo de 0,25 s simulados** para lo que se mueve (cajas por bandas y rieles, montacargas, operarios). La lógica no sabe nada de Three.js, así se prueba con valores conocidos en Node (fuera del repositorio) |
 | Render | `OrthographicCamera` isométrica, `MeshStandardMaterial`, luz direccional con sombras suaves, `InstancedMesh` con pooling para cajas, pallets y cubetas (sin crear ni destruir mallas durante la corrida), geometría estática de la bodega unida en pocas mallas |
 | Qué se anima de verdad | Todo el flujo: camiones que llegan, hacen cola, acoplan y abren la puerta trasera; cajas por rieles; montacargas con horquilla que sube y baja, ruedas y luz giratoria ámbar; elevador; operarios de piso, de muro y empacadores; cubetas que se vuelven cajas selladas; camiones que cargan y salen |
@@ -380,3 +380,126 @@ Las siete fases se hicieron seguidas, por indicación de la persona dueña ("com
 - Los atascos de los muros son deliberados: no se resuelven solos, los resuelve quien administra cancelando el pedido que bloquea.
 - Con los valores por defecto la reserva se llena después de unas 22 horas simuladas (unas 3,7 reales a 1×) y aparece la alerta de reserva llena.
 - Con 20 SKU y pallets de 12, mover el tamaño del pallet o los SKU por camión cambia mucho lo llenos que salen.
+
+## 13. Ronda de ajustes del patio de recibo (camiones, parqueadero, talanqueras, inventario)
+
+Esta sección **reemplaza** lo que digan las secciones 3 (pantalla), 4.3 (recibo), 4.5 (distribución) y 5 (configuración) donde se contradigan. Lo demás sigue igual.
+
+**Qué cambió**
+- **Parqueadero en orden.** Si todos los muelles están ocupados o bloqueados, los camiones entran al predio y se parquean en una de 20 plazas, que se llenan en orden (de la 1 en adelante). Cada vez que se libera un muelle, pasa un solo camión: el que le toque por prioridad y, entre iguales, el que llegó antes. El camión sale de su plaza en reversa, gira en el pasillo y va al muelle; los demás no se mueven, así que ya no titilan.
+- **Camiones.** Todos con cabezote azul cielo y contenedor blanco con su número al centro de cada costado. El número no cambia nunca.
+- **Primera pantalla = solo la bodega.** A pantalla completa (100 dvh). Los controles flotan encima. Más abajo, con scroll, hay una barra de secciones (que se queda arriba) y las secciones: Patio y muelles, Inventario, Parámetros, Indicadores, Inspección y Disrupciones. La rueda sola del mouse baja la página; Ctrl + rueda (o el pellizco) acerca la bodega. Lo que se elige con un clic sale en una tarjeta flotante con botón de cerrar (Escape también cierra). Elegir algo desde una lista de abajo sube la página a la bodega.
+- **Entrada y salida con talanqueras estilo peaje.** Dos garitas, cada una con su carril de entrada y de salida; la barrera sube cuando el camión se registra y baja apenas pasa; un carril atiende a un camión a la vez.
+- **Predio rectangular y sellado.** Cerca de alambre con postes alrededor; afuera hay pasto, árboles y carreteras sin fin: los camiones aparecen y desaparecen por el borde de la pantalla (el mundo se dibuja mucho más grande de lo que se ve).
+- **10 muelles de recepción**, numerados (el número se ve sobre cada muelle).
+- **Fecha, hora y ruta.** Cada camión tiene fecha y hora de llegada (el día 1 es hoy y arranca a las 6 a. m.) y una ruta de región a Bogotá: Caribe, Andina, Pacífica, Orinoquía o Amazonía, con ciudad y kilómetros aproximados.
+- **Cajas.** Cada producto (SKU) tiene siempre el mismo tono, tamaño de caja y unidades por caja. Al hacer clic en una caja salen: SKU y producto, número de caja, lugar de procedencia, camión asociado y unidades que trae el camión.
+- **Empieza desde cero.** Sin cajas ni pedidos. Cada caja se anota en el inventario cuando el camión la suelta en el riel y se descuenta cuando sale en un camión de despacho. Los pedidos solo piden productos que ya están en el inventario (en el activo, en la reserva o en camino).
+
+**Qué se configura (sección "Patio de recibo y muelles")**
+- Camiones por franja: mañana (6 a 12), tarde (12 a 18) y noche (18 a 22). El total del día es la suma. De 10 p. m. a 6 a. m. no llegan camiones. Por defecto 8, 10 y 6. Hoy y mañana siempre están programados; al cambiar una franja que no ha empezado se vuelve a sortear (con números nuevos); una franja que ya empezó se conserva.
+- Habilitar o bloquear cada muelle. Bloquear uno que tiene camión lo deja terminar.
+- Prioridad por categoría (Normal, Alta, Máxima): trae más camiones de esa categoría y sus camiones pasan primero a un muelle libre.
+- Restricción por camión: un muelle fijo y/o la franja desde la que puede entrar a muelle. Ejemplo: camión 4, muelle 3, desde la tarde: llega en la mañana, se parquea y entra solo a ese muelle desde las 12. Un camión con restricción que no puede pasar no frena a los demás.
+- Todo esto se guarda en el navegador (`warehouse_dashboard_settings`, clave `yard`).
+
+**Categorías.** Cinco, una por piso del activo: Juguetes, Ropa de mujer, Ropa de niño, Ropa de hombre y Tecnología, con cuatro productos cada una (20 SKU). Cada camión trae una sola categoría.
+
+**Valores por defecto nuevos.** 0,8 pedidos por minuto y camiones 8 + 10 + 6 de 120 cajas: en un día entran unas 2.880 cajas y salen unas 2.880 (2,0 por minuto en las dos direcciones). En una corrida de 3 días la reserva queda baja y no se llena.
+
+**Archivos nuevos en `js/`:** `catalog.js` (categorías, productos, regiones), `yard_config.js` (la configuración), `truck_schedule.js` (la agenda de camiones), `gates.js` (talanqueras), `inventory.js`, `ui_yard.js` y `ui_inventory.js` (los dos paneles nuevos).
+
+**Pruebas.** 20 de Node nuevas del patio (configuración, agenda, parqueadero en orden, prioridad, restricciones, talanqueras, inventario, selección de cajas, determinismo y 3 días de corrida) además de las anteriores ajustadas; todas pasan. Se encontró y corrigió un defecto: una caja más larga que el espacio libre del riel quedaba anotada como recibida y perdida (ahora se pide el espacio de la caja que sigue).
+
+**Qué no se pudo comprobar.** Los FPS reales en equipos concretos; gestos táctiles reales; lector de pantalla; el aro de foco con Tab en un navegador real; que el sonido suene agradable.
+
+## 14. Ronda de ajustes: titileo, rótulos, velocidad y llegada inmediata
+
+**La causa del titileo.** El dibujo interpola entre la posición anterior y la actual de cada cosa usando qué tanto va del paso de la simulación (0 a 1, que se repite en cada cuadro). Pero la posición anterior solo se actualizaba cuando algo se movía: un camión ya acoplado, una caja en una banda detenida o un montacargas esperando conservaban una posición anterior vieja (a unos 0,4 m) y se dibujaban "bailando" entre las dos al repetirse la fracción. Medido en el navegador, un camión descargando saltaba entre −59,45 y −59,95 en cada cuadro. Ahora cada cosa recuerda en qué paso se movió por última vez (`step_clock` y `moved_this_step` en `entities.js`) y lo que no se movió en el último paso se dibuja quieto. Después del arreglo el camión queda fijo en −59,40 y el recuadro del camión no cambia ni un píxel entre cuadros.
+
+**Otras causas de titileo que también se corrigieron**
+- Los rótulos "Caja N" se repartían entre 36 sprites ordenados por cercanía al centro de la pantalla; al moverse las cajas cambiaba el orden y los textos saltaban de una caja a otra. Se quitaron todos los rótulos automáticos: ahora solo sale "Caja N" sobre la caja que la persona eligió con un clic (los rótulos de pedido sobre muros, cubetas y paquetes se quitaron también; la tarjeta de selección muestra esos datos).
+- Con el patio lleno los camiones que esperaban en la carretera se detenían todos en el mismo punto, uno encima de otro, y sus caras coplanares parpadeaban. Ahora hacen fila (cada uno se detiene 13 m detrás del de adelante); si la fila llega al borde de la pantalla, el siguiente espera unos segundos antes de aparecer. A la talanquera de salida va un camión a la vez (los demás esperan en su muelle con la puerta abierta). Las plazas del parqueadero más cercanas a los carriles de la garita se alejaron 1 m para que el camión que pasa no roce al parqueado.
+- Las ruedas de un montacargas detenido ya no giran (se calculaba el giro con la posición anterior vieja).
+
+**Velocidad.** A 1× pasan 4 segundos simulados por segundo real (antes 6): camiones, cajas, montacargas y personas se ven un tercio más lentos y todo sigue proporcionado (el equilibrio de entradas y salidas no cambia). Los botones 2×, 5× y 10× siguen igual.
+
+**Llegada inmediata de camiones.** Un campo con un número y el botón "Llegar" (en la barra de arriba y en la tarjeta "Hacer llegar camiones ahora" de la sección Patio y muelles; Enter también envía). Pide hasta 40 camiones: salen a la carretera uno tras otro, con 5 s entre sí, y llegan a la talanquera 30 s después. Son camiones extra: no cuentan en los camiones por franja, aparecen en la tabla con franja "Manual", llevan su número siguiente y se les puede poner muelle fijo y "entra desde" como a los demás.
+
+**Pruebas.** 138 pruebas de Node (todas pasan), con nuevas para la llegada inmediata, la fila en la carretera, la salida de a uno y la interpolación de lo que no se mueve. Medido con una prueba de choque de rectángulos de camiones: con los valores por defecto 0 choques en 24 h; con 40 camiones de golpe y todos los muelles bloqueados, 0 choques (antes, más de 3 millones de muestras con camiones encimados).
+
+**Qué no se pudo comprobar.** Que a 60 FPS reales en un celular ya no se vea ningún titileo (se probó con un arnés que avanza el reloj cuadro a cuadro y compara los píxeles del lienzo).
+
+## 15. Botón "Reiniciar inventario"
+
+En la sección Inventario hay un botón "Reiniciar inventario" (con confirmación): vuelve al inicio con la misma semilla y la misma configuración del patio, y pone en 0 los parámetros "Activo lleno al empezar" y "Reserva llena al empezar", para que el inventario empiece de verdad en cero. Hasta que llega el primer camión (a los 40 s simulados) no hay ninguna caja. El botón "Reiniciar" de siempre no cambia esos parámetros: si están por encima de 0, el inventario no empieza en cero, y ahora el diálogo de confirmación lo avisa con los porcentajes y apunta al botón nuevo.
+
+## 16. (Reemplazada por la sección 18) Camiones de despacho sin mercancía
+
+En esta ronda los camiones se quedaban esperando carga; después se decidió lo contrario (la hora de corte se cumple siempre). Ver sección 18.
+
+## 17. Cancelación masiva y 10 montacargas
+
+- **Cancelación masiva.** En la sección Inspección hay dos botones: "Cancelar los pedidos con problema (N)" y "Cancelar todos los pedidos (N)". El número se actualiza en vivo y el botón se apaga si no hay ninguno. Piden confirmación (con cuántos pedidos se cancelan). Las cajas vuelven al stock del activo y las casillas del muro quedan libres, igual que al cancelar uno solo; los pedidos ya completos, empacados o despachados no se tocan, y no se reprocesan.
+- **Montacargas.** El parámetro pasa de 3 por defecto (máximo 8) a 10 por defecto (máximo 10; el slider permite bajarlo hasta 1). El taller tiene 10 puestos en cinco columnas y dos filas, que se llenan desde el fondo para que un montacarga que llega a un puesto libre no atraviese a los parqueados. Con 10 montacargas, 5 horas de trabajo con pedidos a 4 por minuto no se traban y la caja se conserva.
+
+
+## 18. Hora de corte, informe de despachos y bodega de recibo
+
+**Hora de corte (despacho).** Cada puerta tiene una hora de corte (cada `truck_departure_minutes`): a esa hora el camión acoplado sale con lo que haya cargado, aunque no lleve nada, y el corte se anota en el informe. La información del camión muestra su "Hora de corte" y la de la puerta, su "Próximo corte". Si en el momento del corte no hay camión acoplado (por ejemplo, con la entrada cerrada) también queda anotado ("Corte sin camión en la puerta"). Los paquetes nuevos solo se mandan a puertas con camión acoplado cuando las hay.
+
+**Informe de despachos (sección Despachos).** Un renglón por corte: número, hora de corte, puerta, camión, destino (región), pedidos, cajas, unidades y resultado (salió con carga, salió sin carga porque no llegó mercancía, o corte sin camión). Resumen arriba (cortes cumplidos, con carga, sin carga, sin camión, unidades despachadas), los 100 más recientes en pantalla, y un botón para descargar todo lo que recuerda la simulación (hasta 400 cortes) en CSV. El informe empieza vacío cada vez que se reinicia la simulación.
+
+**Entrada de camiones de despacho.** Un interruptor en la sección Despachos (se guarda con la configuración del patio). Cerrada: no entra ningún camión nuevo de despacho a las puertas; los que están acoplados salen en su corte y la puerta queda sin camión (cada corte sin camión se anota). Los camiones que ya venían por la carretera esperan sin pisarse, cada puerta en su lugar de la fila. Al abrirla, los camiones entran de nuevo.
+
+**Bodega de recibo (stock).** Toda la mercancía que baja de los camiones por los rieles entra primero a una bodega de recibo (zona nueva al sur de la reserva, con una pila por producto: una fila por categoría y una columna por producto) y de ahí se reparte a pallets (reserva) y cubetas (activo). Así la descarga no espera a que haya puesto de pallet o cubeta libre ni hay mesas que se llenen.
+- Dos parámetros nuevos en Recibo: "Capacidad de la bodega de recibo" (1.500 cajas por defecto, de 200 a 4.000) y "Reparto a reserva y activo" (90 cajas por minuto por defecto, de 10 a 300).
+- Si la bodega se llena, la caja espera en el riel y el camión detiene la descarga hasta que haya lugar. Si el reparto no puede colocar una caja (sin puesto de pallet o con la cubeta de su piso llena), pasa a la siguiente.
+- Cada caja tiene un estado nuevo, "En la bodega de recibo" (reemplaza al antiguo "En recibo"). En el inventario hay dos columnas nuevas ("En rieles" y "Bodega de recibo") y el indicador "Bodega de recibo" en Indicadores.
+- La pila de la bodega se elige con un clic (SKU, categoría, cajas y unidades) o desde la lista de Inspección. La altura de la pila crece un piso cada 16 cajas.
+- Los pedidos pueden pedir lo que ya está en la bodega de recibo (cuenta como inventario).
+- Se quitaron las mesas de recibo con cajas (el bloque gris al final de cada riel queda como adorno) y el tope de "cajas esperando en recibo".
+
+**Pruebas.** 149 de Node, todas pasan (nuevas: corte con y sin carga, informe, entrada cerrada y abierta, camiones en fila con la entrada cerrada, bodega de recibo —entrada, descarga al ritmo del riel con reparto lento, llenado y tope, pedidos de lo que hay en bodega—).
+
+**Qué no se pudo comprobar.** El aspecto con muchas cajas en la bodega a 60 FPS reales y las cajas que "saltan" del final del riel a la bodega (no hay un transportador dibujado entre los dos).
+
+## 19. Dos flotas de montacargas y bodega de stock grande junto a los muelles
+
+**Cambios de diseño** (la persona pidió separar las montacargas y poner la bodega de stock cerca de los muelles y lejos de los racks; eligió la opción "sur, pegada a los muelles 6 a 10" y que las montacargas lleven todo hasta el multinivel, sin banda).
+- **Bodega de recibo (stock).** Ahora es una sala de 34 × 16,5 m (unos 560 m²) al sur de los racks, que empieza donde terminan los rieles (junto a los muelles 6 a 10) y queda separada de los racks por un pasillo de 4 m. Capacidad por defecto 5.000 cajas (de 500 a 8.000). Una pila por producto (20), más grandes (3,4 × 2,2 m, un piso cada 24 cajas, hasta 5 m). Al norte tiene la franja de armado: 10 puestos de pallet y 5 de cubeta. Al oeste, cinco andenes por donde entran las montacargas de muelle a stock.
+- **Montacargas de muelle a stock (10).** Cada muelle tiene dos puestos de pallet de descarga al final de su riel (los rieles se acortaron a 8 m). Las cajas que bajan del camión se acomodan en un pallet de descarga (cajas de varios productos del mismo camión, 24 por pallet; sale incompleto a los 40 s sin cajas nuevas). Una montacarga de esta flota lo lleva por un carril pegado a los rieles hasta un andén de la bodega y las cajas pasan a la pila de su producto. Son naranja. Solo hacen este viaje.
+- **Montacargas de stock a racks y multinivel (10).** Del stock salen cajas hacia los puestos de armado (pallets de un solo producto y cubetas de un piso). Esta flota, azul, lleva los pallets llenos a los racks, trae los pallets de reabasto de los racks y lleva las cubetas llenas hasta la puerta del elevador por un pasillo entre los racks y el multinivel. La banda de cubetas se quitó. Una cubeta nueva (la que llevó una montacarga o la que sale de desarmar un pallet de reabasto) espera en la puerta del elevador de a una.
+- **Taller.** Una franja pegada a la pared sur con 20 puestos: 10 naranja y 10 azul.
+- **Parámetros.** "Montacargas de muelle a stock" (10 por defecto, de 1 a 10) y "Montacargas de stock a racks y multinivel" (10 por defecto, de 1 a 10). La capacidad de la bodega pasa de 1.500 a 5.000 por defecto.
+- **Estados nuevos.** Caja: "En un pallet de descarga" (entre el riel y la bodega). Pallet: "Entregada a la bodega". Cubeta: "Lista para llevar" y "Esperando el elevador". En el inventario la columna "En rieles" pasa a "En muelle" (rieles y pallets de descarga).
+
+**Titileo de las pilas verdes.** Con una sola caja que llegaba y salía casi de inmediato, la pila (por ejemplo la de ropa de niño, verde azulado) aparecía y desaparecía cada segundo. Ahora la altura dibujada de cada pila va alcanzando a la real poco a poco (nunca salta de nada a una caja) y la llegada de cajas es por pallets de 24, no de a una. También se evitó que los cuadros del piso de filas vecinas se traslaparan.
+
+**Un defecto que apareció al probar y se corrigió.** Una montacarga podía dejar una cubeta en la puerta del elevador a la vez que otra recién desarmada, y la primera se perdía con sus 6 cajas (los SKU se quedaban "sin stock" y los muros se atascaban). Ahora la puerta es de a una cubeta, con espera antes de dejarla, y dejar una segunda lanza un error en vez de perderla. Con eso, 8 semillas de 24 h con los valores por defecto terminan sin atasco de muros.
+
+**Pruebas.** 159 de Node (todas pasan). Nuevas de las flotas y de la bodega (cada flota hace solo lo suyo y no sale de su zona, el pallet de descarga, las cubetas al elevador, sin atascos en 8 semillas de 24 h, las montacargas no se pisan, la bodega es grande, está junto a los rieles y separada de los racks), además de las anteriores ajustadas.
+
+**Qué no se pudo comprobar.** El aspecto con 20 montacargas trabajando a 60 FPS reales; que las montacargas no se estorben cuando coinciden varias en el mismo carril de un solo sentido (se midió que casi nunca pasa, pero no hay un control de tráfico).
+
+## 20. Despachos por hora de corte y destino, OTD, inventario con capacidades y velocidades del tiempo
+
+Esta sección **reemplaza** lo de las secciones 16 y 18 sobre los cortes de los camiones de despacho (los camiones ya no salen "cada tantos minutos" ni salen vacíos).
+
+**Horas de corte.** De fábrica: 03:00, 09:00, 12:00, 18:00 y 20:00. Se cambian en la sección Despachos (de 1 a 8 horas, se ordenan solas, hay botón "Horas de fábrica") y se guardan con la configuración del patio. Al cambiarlas, el corte que viene se reprograma y los pedidos sin salir toman el corte que les toca con las horas nuevas.
+
+**Destinos.** Cada pedido lleva una ciudad de destino al azar (con más peso para las grandes): 27 ciudades de Colombia con acceso por carretera en las cinco regiones (sin islas ni ciudades sin vía), con sus kilómetros desde Bogotá. Mismos orígenes para los camiones de recibo.
+
+**Regla de los 60 minutos.** Un pedido que cae a más de 60 minutos de un corte sale en ese corte; si cae a 60 minutos o menos, sale en el siguiente (cae a las 4:59 p. m., sale a las 6; cae a las 5:00 p. m., sale a las 8). Si a su hora de corte el pedido no está listo (no está empacado y en su pila), pierde el corte: es un **envío tardío**, queda marcado y sale en el siguiente.
+
+**Cómo salen.** Los paquetes empacados llegan al final de la banda de despacho y esperan en una pila por ciudad, en la zona de despacho (27 pilas del color de su región; se ven y se eligen con un clic). A cada hora de corte se arma un camión por ciudad con los pedidos de ese corte (o de uno anterior, si estaban tardíos), con su capacidad (200 cajas por defecto, parámetro "Cajas por camión de despacho"); si no caben, sale otro de la misma ciudad. Salen primero las rutas más largas. Los camiones entran por la talanquera este de a uno (cada 8 s), se acoplan a una de las puertas libres (hasta 6, parámetro "Puertas de despacho"), cargan sus paquetes de a uno y salen, de a uno por la talanquera de salida. Desaparecieron los carriles de rodillos a cada puerta y el parámetro "Salida de camiones cada". La entrada de camiones de despacho se puede cerrar: los camiones esperan y los pedidos, que estaban listos, no se vuelven tardíos por eso.
+
+**Entrega a Tiempo (OTD).** Un pedido es a tiempo si salió en el corte que le tocaba y llega al cliente antes de la hora prometida. Promesa = hora de corte + viaje a 55 km/h + 1 hora de tolerancia. Llegada = hora de salida + viaje a la velocidad promedio de ese camión (sale al azar con la semilla, entre 45 y 65 km/h; no se simula el trayecto, solo se calcula). OTD por día = pedidos a tiempo ÷ pedidos con entrega prometida ese día. Se descarga en CSV (con ";" y coma decimal, para Excel en español): KPI OTD por día (con total y notas), detalle por pedido e informe de camiones. Al reiniciar, si la corrida despachó pedidos, el diálogo ofrece (marcado) descargar el KPI OTD antes de perderlo. El indicador OTD y los envíos tardíos también salen en Indicadores. Los supuestos de velocidad son de la simulación, no datos reales.
+
+**Inventario.** Arriba: mercancía total en el CD (cajas y unidades) y, de ese total, la bodega de stock, la reserva, el activo, lo que está en proceso (muelle, armado de pallets y cubetas y pedidos en proceso) y lo enviado (acumulado). Bodega de stock, reserva y activo muestran su capacidad en cajas (bodega: el parámetro; reserva: pallets × cajas por pallet; activo: 20 productos × 40 cajas), unas unidades aproximadas (con el promedio de unidades por caja del catálogo) y su porcentaje lleno.
+
+**Tiempo.** Velocidades 1×, 2×, 5×, 10×, 25×, 50× y 100× (teclas 1 a 7). A 100× pasan 400 segundos simulados por segundo real: un día de 24 h en unos 3,5 minutos reales; a 50×, 7; a 25×, 14. El tope de pasos por cuadro subió a 80 para que 100× no se frene a 30 cuadros por segundo.
+
+**Pruebas.** Nuevas (`dispatch_tests`): regla de los 60 minutos con los ejemplos de la persona, horas configurables, destinos, ola de un corte (un camión por ciudad, capacidad, solo pedidos de su corte), envío tardío, OTD (promesa, llegada, resumen por día, CSV), cambio de horas en marcha, entrada cerrada, camiones sin pisarse, resumen de inventario con capacidades, velocidades y 4 semillas de 30 h sin atasco.
+
+**Qué no se pudo comprobar.** La sensación de 100× en un equipo real (a esa velocidad los camiones y las montacargas se ven a saltos); que Excel abra el CSV con la configuración regional de cada equipo.
